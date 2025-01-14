@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "582937957307",
+    "project_id": "corrochano-jose-imdbapp",
+    "storage_bucket": "corrochano-jose-imdbapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:582937957307:android:b833e3fd74f82563d42a9e",
+        "android_client_info": {
+          "package_name": "edu.pmdm.corrochano_josimdbapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDb8I8o0oli609QozAlsvCmEYaiQgNRqGY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
