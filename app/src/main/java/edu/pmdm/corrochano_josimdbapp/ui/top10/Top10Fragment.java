@@ -18,8 +18,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import edu.pmdm.corrochano_josimdbapp.adapters.MovieAdapter;
+import edu.pmdm.corrochano_josimdbapp.IMDBApiClient;
 import edu.pmdm.corrochano_josimdbapp.api.IMDBApiService;
+import edu.pmdm.corrochano_josimdbapp.adapters.MovieAdapter;
 import edu.pmdm.corrochano_josimdbapp.databinding.FragmentTop10Binding;
 import edu.pmdm.corrochano_josimdbapp.database.FavoriteDatabaseHelper;
 import edu.pmdm.corrochano_josimdbapp.models.Movie;
@@ -65,7 +66,7 @@ public class Top10Fragment extends Fragment {
         OkHttpClient client = new OkHttpClient.Builder()
                 .addInterceptor(chain -> {
                     Request modifiedRequest = chain.request().newBuilder()
-                            .addHeader("X-RapidAPI-Key", "1d6b8bf5bemsh13bad6e5b669b95p146504jsnaa743711d880")
+                            .addHeader("X-RapidAPI-Key", IMDBApiClient.getApiKey())
                             .addHeader("X-RapidAPI-Host", "imdb-com.p.rapidapi.com")
                             .build();
                     return chain.proceed(modifiedRequest);
@@ -74,7 +75,7 @@ public class Top10Fragment extends Fragment {
                 .readTimeout(30, TimeUnit.SECONDS)
                 .build();
 
-        // Inicialización de Retrofit
+        // Inicialización de Retrofit con el cliente anterior
         Retrofit retrofit = new Retrofit.Builder()
                 .baseUrl("https://imdb-com.p.rapidapi.com/")
                 .client(client)
@@ -83,6 +84,14 @@ public class Top10Fragment extends Fragment {
 
         // Crear una instancia de la interfaz IMDBApiService para realizar las solicitudes a la API
         imdbApiService = retrofit.create(IMDBApiService.class);
+
+        // Llamar al método para cargar las películas
+        cargarTop10Peliculas();
+
+        return root;
+    }
+
+    private void cargarTop10Peliculas() {
 
         // Realiza una llamada a la API para obtener las 10 películas más populares en los Estados Unidos
         Call<PopularMoviesResponse> call = imdbApiService.obtenerTop10("US");
@@ -125,20 +134,31 @@ public class Top10Fragment extends Fragment {
 
                         // Notifica al adaptador que los datos de la lista han cambiado para actualizar la vista
                         adapter.notifyDataSetChanged();
+
                     }
+
+                } else if (response.code() == 429 || response.code() == 403) {
+
+                    Log.e("Top10Fragment", "Límite de solicitudes alcanzado. Cambiando API Key.");
+                    IMDBApiClient.switchApiKey();
+
+                    Toast.makeText(getContext(), "Cambiando API key y reintentando...", Toast.LENGTH_SHORT).show();
+
+                    // Reintentamos la llamada con la nueva API Key
+                    cargarTop10Peliculas();
+
                 } else {
-                    Toast.makeText(getContext(), "Error al cargar películas", Toast.LENGTH_SHORT).show();
+
+                    // Otros errores
+                    Toast.makeText(getContext(), "Error al cargar películas: ", Toast.LENGTH_SHORT).show();
                 }
             }
 
-            // Muestra un mensaje de error si ocurre un fallo en la conexión o en la llamada a la API
             @Override
             public void onFailure(Call<PopularMoviesResponse> call, Throwable t) {
-                Toast.makeText(getContext(), "Error en la llamda a la API", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getContext(), "Error en la llamada a la API", Toast.LENGTH_SHORT).show();
             }
         });
-
-        return root;
     }
 
     @Override

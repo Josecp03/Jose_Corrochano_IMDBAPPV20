@@ -9,7 +9,7 @@ import retrofit2.http.Query;
 public interface IMDBApiService {
 
     @GET("title/get-top-meter")
-    Call<PopularMoviesResponse> obtenerTop10(@Query("Country") String country);
+    Call<PopularMoviesResponse> obtenerTop10(@Query("country") String country);
 
     @GET("title/get-overview")
     Call<MovieOverviewResponse> obtenerDatos(@Query("tconst") String movieId);
