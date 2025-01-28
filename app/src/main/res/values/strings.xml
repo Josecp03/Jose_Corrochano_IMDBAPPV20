@@ -25,4 +25,11 @@
     <string name="buscar">Buscar</string>
     <string name="ingrese_el_a_o">Ingrese el año</string>
     <string name="log_out">Log Out</string>
+
+    <string name="facebook_app_id">503751368947090</string>
+    <string name="fb_login_protocol_scheme">fb503751368947090</string>
+    <string name="default_web_client_id">582937957307-dpp2eatvls7re6rtsm2hshvicb27a09n.apps.googleusercontent.com</string>
+    <string name="facebook_client_token">3525e125525f0779dc56bc8b29a7bcce</string>
+
+
 </resources>

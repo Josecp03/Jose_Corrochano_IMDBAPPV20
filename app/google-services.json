@@ -12,7 +12,36 @@
           "package_name": "edu.pmdm.corrochano_josimdbapp"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "582937957307-o62vfeb90vdohsevfh11o14g8c0e905p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "edu.pmdm.corrochano_josimdbapp",
+            "certificate_hash": "c6ea8b7fd5e934616836ca292b0cdf431f820bff"
+          }
+        },
+        {
+          "client_id": "582937957307-r9k66b5tjpnfjdkjsnss1v01v91f5fit.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "edu.pmdm.corrochano_josimdbapp",
+            "certificate_hash": "9b9520e80159316d50433b873e78fa7f8af57ef6"
+          }
+        },
+        {
+          "client_id": "582937957307-rq9k56t5g872ogve4v148h59mvkrjien.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "edu.pmdm.corrochano_josimdbapp",
+            "certificate_hash": "fef1450d765df2cf93288011f1fa298bf7050cb7"
+          }
+        },
+        {
+          "client_id": "582937957307-dpp2eatvls7re6rtsm2hshvicb27a09n.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyDb8I8o0oli609QozAlsvCmEYaiQgNRqGY"
@@ -20,7 +49,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "582937957307-dpp2eatvls7re6rtsm2hshvicb27a09n.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
