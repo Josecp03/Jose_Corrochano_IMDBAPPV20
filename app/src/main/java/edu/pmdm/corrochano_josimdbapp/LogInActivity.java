@@ -1,7 +1,9 @@
 package edu.pmdm.corrochano_josimdbapp;
 
 import android.app.AlertDialog;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
@@ -32,12 +34,17 @@ import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.auth.AuthCredential;
-import com.google.firebase.auth.AuthResult;
+import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthUserCollisionException;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.auth.FacebookAuthProvider;
-import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.GoogleAuthProvider;
+
+import edu.pmdm.corrochano_josimdbapp.database.FavoriteDatabaseHelper;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 public class LogInActivity extends AppCompatActivity {
 
@@ -48,7 +55,6 @@ public class LogInActivity extends AppCompatActivity {
     private GoogleSignInClient googleSignInClient;
     private CallbackManager callbackManager;
     private AuthCredential facebookCredential;
-
     private static final String TAG = "LOG_IN_ACTIVITY";
 
     // Define un lanzador para manejar el resultado de la actividad iniciada con un Intent (Google normal)
@@ -76,15 +82,20 @@ public class LogInActivity extends AppCompatActivity {
                                 if (task.isSuccessful()) {
 
                                     // Obtiene la instancia actual de FirebaseAuth para acceder a los datos del usuario
-                                    FirebaseAuth authInstance = FirebaseAuth.getInstance();
+                                    FirebaseUser authInstance = FirebaseAuth.getInstance().getCurrentUser();
 
-                                    // Extrae la información del usuario autenticado
-                                    String nombre = authInstance.getCurrentUser().getDisplayName();
-                                    String email = authInstance.getCurrentUser().getEmail();
-                                    Uri imagen = authInstance.getCurrentUser().getPhotoUrl();
+                                    if (authInstance != null) {
+                                        // Extrae la información del usuario autenticado
+                                        String nombre = authInstance.getDisplayName();
+                                        String email = authInstance.getEmail();
+                                        Uri imagen = authInstance.getPhotoUrl();
 
-                                    // Llamada al método que nos manda a la actividad principal
-                                    navigateToMainActivity(nombre, email, imagen);
+                                        // Registrar el last_login en la base de datos
+                                        registrarLastLogin(authInstance.getUid(), nombre, email);
+
+                                        // Llamada al método que nos manda a la actividad principal
+                                        navigateToMainActivity(nombre, email, imagen);
+                                    }
 
                                 } else {
                                     // Volver a activar el botón de Google para intentarlo otra vez
@@ -136,8 +147,11 @@ public class LogInActivity extends AppCompatActivity {
                                                 String nombre = linkResult.getResult().getUser().getDisplayName();
                                                 String email = linkResult.getResult().getUser().getEmail();
                                                 Uri imagen = linkResult.getResult().getUser().getPhotoUrl();
-                                                navigateToMainActivity(nombre, email, imagen);
 
+                                                // Registrar el last_login en la base de datos
+                                                registrarLastLogin(currentUser.getUid(), nombre, email);
+
+                                                navigateToMainActivity(nombre, email, imagen);
                                             } else {
                                                 Toast.makeText(LogInActivity.this, "Fallo al vincular cuentas.", Toast.LENGTH_SHORT).show();
                                             }
@@ -157,7 +171,6 @@ public class LogInActivity extends AppCompatActivity {
                 }
             });
 
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -168,7 +181,7 @@ public class LogInActivity extends AppCompatActivity {
 
         setContentView(R.layout.activity_log_in);
 
-        // Inicializar FireBase
+        // Inicializar Firebase
         FirebaseApp.initializeApp(this);
 
         // Obtiene una instancia de FirebaseAuth para manejar la autenticación
@@ -204,42 +217,39 @@ public class LogInActivity extends AppCompatActivity {
             @Override
             public void onCancel() {
                 Log.d(TAG, "Facebook Login Canceled");
+                Toast.makeText(LogInActivity.this, "Inicio de sesión con Facebook cancelado.", Toast.LENGTH_SHORT).show();
             }
 
             @Override
             public void onError(@NonNull FacebookException e) {
+                Log.e(TAG, "Facebook Login Error", e);
                 Toast.makeText(LogInActivity.this, "Error al iniciar sesión con Facebook", Toast.LENGTH_SHORT).show();
             }
         });
 
         // Verificar si el usuario ya está autenticado en Firebase
         if (auth.getCurrentUser() != null) {
-
             // Obtener los datos del usuario actual
             String nombre = auth.getCurrentUser().getDisplayName();
             String email = auth.getCurrentUser().getEmail();
             Uri imagen = auth.getCurrentUser().getPhotoUrl();
 
+            // Registrar el last_login en la base de datos
+            registrarLastLogin(auth.getCurrentUser().getUid(), nombre, email);
+
             // Llamada al método para irnos a la actividad principal
             navigateToMainActivity(nombre, email, imagen);
-
         }
 
         // Personalizar el texto del botón de inicio de sesión de Google
-        for (int i = 0; i < btnGoogle.getChildCount(); i++) {
-            View v = btnGoogle.getChildAt(i);
-            if (v instanceof TextView) {
-                ((TextView) v).setText("Sign in with Google");
-                break;
-            }
-        }
+        personalizarBotonGoogle(btnGoogle);
 
         // Listener para cuando se pulsa el botón de Iniciar sesión con Google
         btnGoogle.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
 
-                // Desactivar el botón para q el usuario no le pueda volver a dar hasta q se realice la acción necesaria
+                // Desactivar el botón para que el usuario no pueda volver a darle hasta que se realice la acción necesaria
                 btnGoogle.setEnabled(false);
 
                 // Obtiene un Intent para iniciar el flujo de inicio de sesión de Google
@@ -251,7 +261,6 @@ public class LogInActivity extends AppCompatActivity {
         });
     }
 
-    // Método para manejar el token de Facebook y autenticarnos en Firebase
     private void handleFacebookAccessToken(AccessToken token) {
 
         AuthCredential credential = FacebookAuthProvider.getCredential(token.getToken());
@@ -263,6 +272,11 @@ public class LogInActivity extends AppCompatActivity {
                     String nombre = usuario.getDisplayName();
                     String email = usuario.getEmail();
                     Uri imagen = usuario.getPhotoUrl();
+
+                    // Registrar el last_login en la base de datos
+                    registrarLastLogin(usuario.getUid(), nombre, email);
+
+                    // Llamada al método para irnos a la actividad principal
                     navigateToMainActivity(nombre, email, imagen);
                 }
             } else {
@@ -276,13 +290,13 @@ public class LogInActivity extends AppCompatActivity {
                     mostrarDialogoVinculacion(email);
                 } else {
                     // Otro tipo de error
+                    Log.e(TAG, "Facebook Sign-In Failed", task.getException());
                     Toast.makeText(LogInActivity.this, "Error al autenticar con Facebook", Toast.LENGTH_SHORT).show();
                 }
             }
         });
     }
 
-    // Dialogo para el usuario en caso de colisión, preguntando si desea vincular con Google
     private void mostrarDialogoVinculacion(String email) {
         new AlertDialog.Builder(this)
                 .setTitle("Cuenta ya existente")
@@ -299,7 +313,6 @@ public class LogInActivity extends AppCompatActivity {
                 .show();
     }
 
-    // Método para dirigirnos a la actividad principal
     private void navigateToMainActivity(String nombre, String email, Uri imagen) {
         // Crear el Intent
         Intent intent = new Intent(LogInActivity.this, MainActivity.class);
@@ -311,6 +324,9 @@ public class LogInActivity extends AppCompatActivity {
             intent.putExtra("imagen", imagen.toString());
         }
 
+        // Registrar el last_login en la base de datos
+        registrarLastLogin(auth.getCurrentUser().getUid(), nombre, email);
+
         // Lanzar el intent
         startActivity(intent);
 
@@ -318,11 +334,45 @@ public class LogInActivity extends AppCompatActivity {
         finish();
     }
 
-    // Sobrescribimos onActivityResult para inyectar el callback de Facebook
+    private void registrarLastLogin(String userId, String name, String email) {
+        // Obtener la fecha y hora actual en el formato deseado
+        String fechaLogin = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date());
+
+        // Crear una instancia del helper de la base de datos
+        FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(this);
+
+        // Insertar o actualizar el usuario en la tabla t_usuarios
+        dbHelper.insertOrUpdateUser(
+                userId,
+                name,
+                email,
+                fechaLogin,
+                null
+        );
+
+        // Actualizar las preferencias
+        SharedPreferences preferences = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("isLoggedIn", true);
+        editor.apply();
+    }
+
+
+    private void personalizarBotonGoogle(SignInButton button) {
+        for (int i = 0; i < button.getChildCount(); i++) {
+            View view = button.getChildAt(i);
+            if (view instanceof TextView) {
+                ((TextView) view).setText("Iniciar sesión con Google");
+                break;
+            }
+        }
+    }
+
+
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        // Callback de Facebook
         callbackManager.onActivityResult(requestCode, resultCode, data);
         super.onActivityResult(requestCode, resultCode, data);
     }
-
 }
