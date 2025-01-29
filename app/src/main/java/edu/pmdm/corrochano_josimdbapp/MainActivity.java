@@ -7,11 +7,16 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.widget.AppCompatImageView;
 import androidx.drawerlayout.widget.DrawerLayout;
 import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
@@ -28,9 +33,6 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.material.navigation.NavigationView;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
-
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.appcompat.widget.AppCompatImageView;
 
 import edu.pmdm.corrochano_josimdbapp.database.FavoriteDatabaseHelper;
 import edu.pmdm.corrochano_josimdbapp.databinding.ActivityMainBinding;
@@ -84,43 +86,37 @@ public class MainActivity extends AppCompatActivity {
         // Inicializar Auth y Google Sign-In Client
         mAuth = FirebaseAuth.getInstance();
         GoogleSignInOptions options = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                .requestIdToken(getString(R.string.client_id)) // Solicita el ID Token
+                .requestIdToken(getString(R.string.default_web_client_id)) // Asegúrate de que este string coincide con el de tu Firebase
                 .requestEmail() // Solicita el email del usuario
                 .build();
         googleSignInClient = GoogleSignIn.getClient(this, options);
 
         // Tomamos la referencia al header del NavigationView
         View headerView = navigationView.getHeaderView(0);
-        textViewNombre = headerView.findViewById(R.id.textView);
+        textViewNombre = headerView.findViewById(R.id.textViewNombre);
         textViewEmail = headerView.findViewById(R.id.textViewEmail);
-        imageViewPhoto = headerView.findViewById(R.id.imageView);
-        logoutButton = headerView.findViewById(R.id.button);
+        imageViewPhoto = headerView.findViewById(R.id.imageViewPhoto);
+        logoutButton = headerView.findViewById(R.id.buttonLogout);
 
-        // Obtenemos datos del usuario Firebase
+        // Obtener datos del usuario actual
         FirebaseUser usuario = mAuth.getCurrentUser();
-
-        // Comprobamos si el usuario de Firebase está logueado con Facebook para sobreescribir
         AccessToken fbAccessToken = AccessToken.getCurrentAccessToken();
         boolean isFacebookLoggedIn = (fbAccessToken != null && !fbAccessToken.isExpired());
 
         if (usuario != null) {
-            // Si es un usuario de Firebase, sacamos lo que tengamos
             String nombre = usuario.getDisplayName();
             String email = usuario.getEmail();
             Uri fotoUri = usuario.getPhotoUrl();
 
-            // Si hay token de Facebook vigente, preferimos los datos de Facebook
+            // Si el usuario está logueado con Facebook, preferimos los datos de Facebook
             if (isFacebookLoggedIn) {
-                // Obtener el nombre y la foto
                 Profile profile = Profile.getCurrentProfile();
 
                 if (profile != null) {
                     String facebookNombre = profile.getFirstName() + " " + profile.getLastName();
-                    // Si no hay nombre, ponemos un texto genérico
                     nombre = facebookNombre.trim().isEmpty() ? "Usuario de Facebook" : facebookNombre;
                     email = "Conectado con Facebook";
 
-                    // Obtenemos la URI de la imagen de perfil con un tamaño 300x300
                     Uri facebookFoto = profile.getProfilePictureUri(300, 300);
                     if (facebookFoto != null) {
                         fotoUri = facebookFoto;
@@ -128,28 +124,23 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-        }
+            // Mostrar los datos en el NavigationView Header
+            textViewNombre.setText(nombre != null ? nombre : "Usuario");
+            textViewEmail.setText(email != null ? email : "Sin email");
 
-        // Mostrar los datos en el NavigationView Header
-        textViewNombre.setText(usuario != null ? (isFacebookLoggedIn && getFacebookNombre() != null ? getFacebookNombre() : usuario.getDisplayName()) : "Usuario");
-        textViewEmail.setText(usuario != null ? (isFacebookLoggedIn ? "Conectado con Facebook" : usuario.getEmail()) : "Sin email");
-
-        // Cargar la imagen de perfil
-        if (usuario != null) {
-            if (isFacebookLoggedIn && getFacebookFoto() != null) {
+            // Cargar la imagen de perfil usando Glide
+            if (fotoUri != null) {
                 Glide.with(this)
-                        .load(getFacebookFoto())
-                        .circleCrop()
-                        .into(imageViewPhoto);
-            } else if (usuario.getPhotoUrl() != null) {
-                Glide.with(this)
-                        .load(usuario.getPhotoUrl())
+                        .load(fotoUri)
                         .circleCrop()
                         .into(imageViewPhoto);
             }
+        } else {
+            // Si el usuario es nulo, navegar al LoginActivity
+            navegarAlLogin();
         }
 
-        // Configurar el botón de Log Out
+        // Configurar el botón de Logout
         logoutButton.setOnClickListener(v -> {
 
             if (usuario != null) {
@@ -194,22 +185,10 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-
-    private String getFacebookNombre() {
-        Profile profile = Profile.getCurrentProfile();
-        if (profile != null) {
-            return profile.getFirstName() + " " + profile.getLastName();
-        }
-        return null;
-    }
-
-
-    private Uri getFacebookFoto() {
-        Profile profile = Profile.getCurrentProfile();
-        if (profile != null) {
-            return profile.getProfilePictureUri(300, 300);
-        }
-        return null;
+    private void navegarAlLogin(){
+        Intent intent = new Intent(MainActivity.this, LogInActivity.class);
+        startActivity(intent);
+        finish();
     }
 
     @Override
@@ -217,6 +196,18 @@ public class MainActivity extends AppCompatActivity {
         getMenuInflater().inflate(R.menu.main, menu);
         return true;
     }
+
+    @Override
+    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+        int id = item.getItemId();
+        if (id == R.id.action_edit_user) {
+            Intent intent = new Intent(MainActivity.this, EditUserActivity.class);
+            startActivity(intent);
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
 
     @Override
     public boolean onSupportNavigateUp() {

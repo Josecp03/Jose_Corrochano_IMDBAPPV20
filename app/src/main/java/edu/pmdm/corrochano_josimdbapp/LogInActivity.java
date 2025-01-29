@@ -8,6 +8,8 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -34,6 +36,7 @@ import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.auth.AuthCredential;
+import com.google.firebase.auth.EmailAuthProvider;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthUserCollisionException;
 import com.google.firebase.auth.FirebaseUser;
@@ -44,6 +47,7 @@ import edu.pmdm.corrochano_josimdbapp.database.FavoriteDatabaseHelper;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 
 public class LogInActivity extends AppCompatActivity {
@@ -57,11 +61,19 @@ public class LogInActivity extends AppCompatActivity {
     private AuthCredential facebookCredential;
     private static final String TAG = "LOG_IN_ACTIVITY";
 
+    // Referencias a los campos de correo y contraseña
+    private EditText editTextEmail;
+    private EditText editTextPassword;
+    private Button buttonRegister;
+    private Button buttonLogin;
+
     // Define un lanzador para manejar el resultado de la actividad iniciada con un Intent (Google normal)
     private final ActivityResultLauncher<Intent> activityResultLauncher =
             registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), new ActivityResultCallback<ActivityResult>() {
                 @Override
                 public void onActivityResult(ActivityResult result) {
+
+                    Log.d(TAG, "Google Sign-In activity result received.");
 
                     // Comprobar si el resultado de la actividad fue exitoso
                     if (result.getResultCode() == RESULT_OK && result.getData() != null) {
@@ -71,6 +83,7 @@ public class LogInActivity extends AppCompatActivity {
                         try {
                             // Obtener la cuenta de Google del usuario
                             GoogleSignInAccount signInAccount = accountTask.getResult(ApiException.class);
+                            Log.d(TAG, "Google Sign-In successful: " + signInAccount.getEmail());
 
                             // Crea las credenciales de autenticación para Firebase usando el ID Token de la cuenta de Google
                             AuthCredential authCredential = GoogleAuthProvider.getCredential(signInAccount.getIdToken(), null);
@@ -81,6 +94,8 @@ public class LogInActivity extends AppCompatActivity {
                                 // Comprueba si la autenticación fue exitosa
                                 if (task.isSuccessful()) {
 
+                                    Log.d(TAG, "Firebase authentication with Google credential successful.");
+
                                     // Obtiene la instancia actual de FirebaseAuth para acceder a los datos del usuario
                                     FirebaseUser authInstance = FirebaseAuth.getInstance().getCurrentUser();
 
@@ -90,11 +105,13 @@ public class LogInActivity extends AppCompatActivity {
                                         String email = authInstance.getEmail();
                                         Uri imagen = authInstance.getPhotoUrl();
 
+                                        Log.d(TAG, "User Info - Name: " + nombre + ", Email: " + email);
+
                                         // Registrar el last_login en la base de datos
                                         registrarLastLogin(authInstance.getUid(), nombre, email);
 
                                         // Llamada al método que nos manda a la actividad principal
-                                        navigateToMainActivity(nombre, email, imagen);
+                                        navigateToMainActivity();
                                     }
 
                                 } else {
@@ -102,21 +119,23 @@ public class LogInActivity extends AppCompatActivity {
                                     btnGoogle.setEnabled(true);
 
                                     // Mostrar mensaje de error al usuario
-                                    Toast.makeText(LogInActivity.this, "Error al iniciar sesión.", Toast.LENGTH_SHORT).show();
+                                    Toast.makeText(LogInActivity.this, "Error al iniciar sesión con Google.", Toast.LENGTH_SHORT).show();
+                                    Log.e(TAG, "Firebase authentication with Google credential failed.", task.getException());
                                 }
                             });
 
                         } catch (ApiException e) {
-                            e.printStackTrace();
+                            Log.e(TAG, "Google Sign-In failed.", e);
                             // Volver a activar el botón de Google para intentarlo otra vez
                             btnGoogle.setEnabled(true);
                             // Mostrar mensaje de error al usuario
-                            Toast.makeText(LogInActivity.this, "Error al iniciar sesión.", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(LogInActivity.this, "Error al iniciar sesión con Google.", Toast.LENGTH_SHORT).show();
                         }
 
                     } else {
                         // Volver a activar el botón de Google para intentarlo otra vez
                         btnGoogle.setEnabled(true);
+                        Log.d(TAG, "Google Sign-In canceled or failed.");
                     }
                 }
             });
@@ -127,46 +146,52 @@ public class LogInActivity extends AppCompatActivity {
                 @Override
                 public void onActivityResult(ActivityResult result) {
 
+                    Log.d(TAG, "Google Sign-In for linking accounts result received.");
+
                     if (result.getResultCode() == RESULT_OK && result.getData() != null) {
                         Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(result.getData());
                         try {
                             GoogleSignInAccount account = task.getResult(ApiException.class);
+                            Log.d(TAG, "Google Sign-In for linking successful: " + account.getEmail());
 
                             // Primero iniciamos sesión con Google
                             AuthCredential googleCredential = GoogleAuthProvider.getCredential(account.getIdToken(), null);
                             auth.signInWithCredential(googleCredential).addOnCompleteListener(linkTask -> {
                                 if (linkTask.isSuccessful()) {
+                                    Log.d(TAG, "Firebase authentication with Google credential for linking successful.");
+
                                     // Vinculamos la credencial de Facebook
                                     FirebaseUser currentUser = auth.getCurrentUser();
                                     if (currentUser != null && facebookCredential != null) {
                                         currentUser.linkWithCredential(facebookCredential).addOnCompleteListener(linkResult -> {
                                             if (linkResult.isSuccessful()) {
+                                                Log.d(TAG, "Accounts successfully linked.");
+
                                                 Toast.makeText(LogInActivity.this, "Cuentas vinculadas correctamente.", Toast.LENGTH_SHORT).show();
 
-                                                // Extraemos info de usuario
-                                                String nombre = linkResult.getResult().getUser().getDisplayName();
-                                                String email = linkResult.getResult().getUser().getEmail();
-                                                Uri imagen = linkResult.getResult().getUser().getPhotoUrl();
-
                                                 // Registrar el last_login en la base de datos
-                                                registrarLastLogin(currentUser.getUid(), nombre, email);
+                                                registrarLastLogin(currentUser.getUid(), currentUser.getDisplayName(), currentUser.getEmail());
 
-                                                navigateToMainActivity(nombre, email, imagen);
+                                                navigateToMainActivity();
                                             } else {
                                                 Toast.makeText(LogInActivity.this, "Fallo al vincular cuentas.", Toast.LENGTH_SHORT).show();
+                                                Log.e(TAG, "Failed to link accounts.", linkResult.getException());
                                             }
                                         });
                                     }
                                 } else {
                                     Toast.makeText(LogInActivity.this, "Error al autenticar Google para vincular.", Toast.LENGTH_SHORT).show();
+                                    Log.e(TAG, "Firebase authentication with Google credential for linking failed.", linkTask.getException());
                                 }
                             });
 
                         } catch (ApiException e) {
                             Toast.makeText(LogInActivity.this, "Error al iniciar sesión con Google para vincular.", Toast.LENGTH_SHORT).show();
+                            Log.e(TAG, "Google Sign-In for linking failed.", e);
                         }
                     } else {
                         Toast.makeText(LogInActivity.this, "Inicio de sesión con Google cancelado para vincular cuentas.", Toast.LENGTH_SHORT).show();
+                        Log.d(TAG, "Google Sign-In for linking canceled or failed.");
                     }
                 }
             });
@@ -183,9 +208,11 @@ public class LogInActivity extends AppCompatActivity {
 
         // Inicializar Firebase
         FirebaseApp.initializeApp(this);
+        Log.d(TAG, "FirebaseApp initialized.");
 
         // Obtiene una instancia de FirebaseAuth para manejar la autenticación
         auth = FirebaseAuth.getInstance();
+        Log.d(TAG, "FirebaseAuth instance obtained.");
 
         // Configurar opciones de inicio de sesión con Google
         GoogleSignInOptions options = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
@@ -195,16 +222,23 @@ public class LogInActivity extends AppCompatActivity {
 
         // Crea un cliente de Google Sign-In con las opciones configuradas
         googleSignInClient = GoogleSignIn.getClient(this, options);
+        Log.d(TAG, "GoogleSignInClient initialized.");
 
         // Inicializamos Facebook SDK y CallbackManager
         callbackManager = CallbackManager.Factory.create();
+        Log.d(TAG, "CallbackManager initialized.");
 
-        // Asignar el botón de Google del XML
+        // Asignar los botones y campos del XML
         btnGoogle = findViewById(R.id.sign_in_button);
-
-        // Asignar el botón de Facebook del XML
         btnFacebook = findViewById(R.id.login_button);
         btnFacebook.setReadPermissions("email", "public_profile");
+        Log.d(TAG, "Buttons and EditTexts initialized.");
+
+        // Campos de correo y contraseña
+        editTextEmail = findViewById(R.id.editTextEmail);
+        editTextPassword = findViewById(R.id.editTextPassword);
+        buttonRegister = findViewById(R.id.buttonRegister);
+        buttonLogin = findViewById(R.id.buttonLogin);
 
         // Registrar el callback de Facebook
         btnFacebook.registerCallback(callbackManager, new FacebookCallback<LoginResult>() {
@@ -229,16 +263,9 @@ public class LogInActivity extends AppCompatActivity {
 
         // Verificar si el usuario ya está autenticado en Firebase
         if (auth.getCurrentUser() != null) {
-            // Obtener los datos del usuario actual
-            String nombre = auth.getCurrentUser().getDisplayName();
-            String email = auth.getCurrentUser().getEmail();
-            Uri imagen = auth.getCurrentUser().getPhotoUrl();
-
-            // Registrar el last_login en la base de datos
-            registrarLastLogin(auth.getCurrentUser().getUid(), nombre, email);
-
+            Log.d(TAG, "User already authenticated. Navigating to MainActivity.");
             // Llamada al método para irnos a la actividad principal
-            navigateToMainActivity(nombre, email, imagen);
+            navigateToMainActivity();
         }
 
         // Personalizar el texto del botón de inicio de sesión de Google
@@ -248,6 +275,8 @@ public class LogInActivity extends AppCompatActivity {
         btnGoogle.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+
+                Log.d(TAG, "Google Sign-In button clicked.");
 
                 // Desactivar el botón para que el usuario no pueda volver a darle hasta que se realice la acción necesaria
                 btnGoogle.setEnabled(false);
@@ -259,14 +288,190 @@ public class LogInActivity extends AppCompatActivity {
                 activityResultLauncher.launch(signInIntent);
             }
         });
+
+        // Listener para el botón de Registro
+        buttonRegister.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Log.d(TAG, "Register button clicked.");
+                registrarUsuario();
+            }
+        });
+
+        // Listener para el botón de Login
+        buttonLogin.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                Log.d(TAG, "Login button clicked.");
+                iniciarSesion();
+            }
+        });
     }
 
+    private void registrarUsuario() {
+        Log.d(TAG, "Starting user registration.");
+
+        String email = editTextEmail.getText().toString().trim();
+        String password = editTextPassword.getText().toString().trim();
+
+        // Validaciones básicas
+        if (email.isEmpty()) {
+            editTextEmail.setError("El correo es requerido");
+            editTextEmail.requestFocus();
+            Log.d(TAG, "Email field is empty.");
+            return;
+        }
+
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            editTextEmail.setError("Formato de correo inválido");
+            editTextEmail.requestFocus();
+            Log.d(TAG, "Email format is invalid.");
+            return;
+        }
+
+        if (password.isEmpty()) {
+            editTextPassword.setError("La contraseña es requerida");
+            editTextPassword.requestFocus();
+            Log.d(TAG, "Password field is empty.");
+            return;
+        }
+
+        if (password.length() < 6) {
+            editTextPassword.setError("La contraseña debe tener al menos 6 caracteres");
+            editTextPassword.requestFocus();
+            Log.d(TAG, "Password is too short.");
+            return;
+        }
+
+        Log.d(TAG, "Creating user with email and password.");
+
+        // Crear el usuario con FirebaseAuth
+        auth.createUserWithEmailAndPassword(email, password)
+                .addOnCompleteListener(this, task -> {
+                    if (task.isSuccessful()) {
+                        // Registro exitoso
+                        Log.d(TAG, "User registration successful.");
+                        FirebaseUser usuario = auth.getCurrentUser();
+                        if (usuario != null) {
+                            String uid = usuario.getUid();
+                            String nombre = usuario.getEmail().split("@")[0]; // Puedes personalizar esto
+                            String emailUser = usuario.getEmail();
+
+                            // Registrar en la base de datos local
+                            registrarLastLogin(uid, nombre, emailUser);
+
+                            Toast.makeText(LogInActivity.this, "Registro exitoso.", Toast.LENGTH_SHORT).show();
+
+                            // Navegar a la actividad principal
+                            navigateToMainActivity();
+                        }
+                    } else {
+                        // Manejar errores de registro
+                        Log.e(TAG, "User registration failed.", task.getException());
+                        if (task.getException() instanceof FirebaseAuthUserCollisionException) {
+                            // El correo ya está registrado
+                            FirebaseAuthUserCollisionException exception = (FirebaseAuthUserCollisionException) task.getException();
+                            // String existingEmail = exception.getEmail(); // Esta línea ya no es segura
+                            String existingEmail = email; // Usar el email ingresado por el usuario
+
+                            Log.d(TAG, "Email already registered: " + existingEmail);
+
+                            if (existingEmail != null && !existingEmail.isEmpty()) {
+                                // Obtener los métodos de inicio de sesión para este correo
+                                auth.fetchSignInMethodsForEmail(existingEmail)
+                                        .addOnCompleteListener(fetchTask -> {
+                                            if (fetchTask.isSuccessful()) {
+                                                List<String> signInMethods = fetchTask.getResult().getSignInMethods();
+                                                boolean isGoogle = signInMethods != null && signInMethods.contains(GoogleAuthProvider.GOOGLE_SIGN_IN_METHOD);
+                                                boolean isFacebook = signInMethods != null && signInMethods.contains(FacebookAuthProvider.FACEBOOK_SIGN_IN_METHOD);
+
+                                                if (isGoogle || isFacebook) {
+                                                    Toast.makeText(LogInActivity.this, "Ese correo ya está registrado con otro tipo de inicio de sesión. Por favor, intenta iniciar sesión.", Toast.LENGTH_LONG).show();
+                                                } else {
+                                                    Toast.makeText(LogInActivity.this, "Ese correo ya está registrado. Intenta iniciar sesión.", Toast.LENGTH_LONG).show();
+                                                }
+                                            } else {
+                                                // Error al obtener los métodos de inicio de sesión
+                                                Toast.makeText(LogInActivity.this, "Error al verificar el correo.", Toast.LENGTH_SHORT).show();
+                                                Log.e(TAG, "Failed to fetch sign-in methods.", fetchTask.getException());
+                                            }
+                                        });
+                            } else {
+                                // existingEmail es null o vacío, no se puede verificar los métodos de inicio de sesión
+                                Toast.makeText(LogInActivity.this, "Ese correo ya está registrado. Intenta iniciar sesión.", Toast.LENGTH_LONG).show();
+                            }
+                        } else {
+                            // Otros errores
+                            Toast.makeText(LogInActivity.this, "Error al registrar: " + task.getException().getMessage(), Toast.LENGTH_LONG).show();
+                        }
+                    }
+                });
+    }
+
+
+    private void iniciarSesion() {
+        Log.d(TAG, "Starting user login.");
+
+        String email = editTextEmail.getText().toString().trim();
+        String password = editTextPassword.getText().toString().trim();
+
+        // Validaciones básicas
+        if (email.isEmpty()) {
+            editTextEmail.setError("El correo es requerido");
+            editTextEmail.requestFocus();
+            Log.d(TAG, "Email field is empty.");
+            return;
+        }
+
+        if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            editTextEmail.setError("Formato de correo inválido");
+            editTextEmail.requestFocus();
+            Log.d(TAG, "Email format is invalid.");
+            return;
+        }
+
+        if (password.isEmpty()) {
+            editTextPassword.setError("La contraseña es requerida");
+            editTextPassword.requestFocus();
+            Log.d(TAG, "Password field is empty.");
+            return;
+        }
+
+        Log.d(TAG, "Signing in with email and password.");
+
+        // Iniciar sesión con FirebaseAuth
+        auth.signInWithEmailAndPassword(email, password)
+                .addOnCompleteListener(this, task -> {
+                    if (task.isSuccessful()) {
+                        // Inicio de sesión exitoso
+                        Log.d(TAG, "User login successful.");
+                        FirebaseUser usuario = auth.getCurrentUser();
+                        if (usuario != null) {
+                            // Registrar el last_login en la base de datos
+                            registrarLastLogin(usuario.getUid(), usuario.getEmail().split("@")[0], usuario.getEmail());
+
+                            Toast.makeText(LogInActivity.this, "Inicio de sesión exitoso.", Toast.LENGTH_SHORT).show();
+
+                            // Navegar a la actividad principal
+                            navigateToMainActivity();
+                        }
+                    } else {
+                        // Manejar errores de inicio de sesión
+                        Log.e(TAG, "User login failed.", task.getException());
+                        Toast.makeText(LogInActivity.this, "Error al iniciar sesión: " + task.getException().getMessage(), Toast.LENGTH_LONG).show();
+                    }
+                });
+    }
+
+
     private void handleFacebookAccessToken(AccessToken token) {
+        Log.d(TAG, "Handling Facebook access token.");
 
         AuthCredential credential = FacebookAuthProvider.getCredential(token.getToken());
         auth.signInWithCredential(credential).addOnCompleteListener(this, task -> {
             if (task.isSuccessful()) {
                 // Inicio de sesión exitoso con Facebook
+                Log.d(TAG, "Facebook authentication successful.");
                 FirebaseUser usuario = auth.getCurrentUser();
                 if (usuario != null) {
                     String nombre = usuario.getDisplayName();
@@ -277,13 +482,14 @@ public class LogInActivity extends AppCompatActivity {
                     registrarLastLogin(usuario.getUid(), nombre, email);
 
                     // Llamada al método para irnos a la actividad principal
-                    navigateToMainActivity(nombre, email, imagen);
+                    navigateToMainActivity();
                 }
             } else {
                 // Si hay colisión de cuentas
                 if (task.getException() instanceof FirebaseAuthUserCollisionException) {
                     FirebaseAuthUserCollisionException collisionEx = (FirebaseAuthUserCollisionException) task.getException();
                     String email = collisionEx.getEmail();
+                    Log.d(TAG, "Email collision detected: " + email);
 
                     // Guardamos credencial de Facebook y ofrecemos vinculación
                     facebookCredential = credential;
@@ -298,34 +504,30 @@ public class LogInActivity extends AppCompatActivity {
     }
 
     private void mostrarDialogoVinculacion(String email) {
+        Log.d(TAG, "Showing account linking dialog for email: " + email);
+
         new AlertDialog.Builder(this)
                 .setTitle("Cuenta ya existente")
                 .setMessage("Ya existe una cuenta con el correo " + email + ". ¿Deseas vincular tu cuenta de Facebook con Google?")
                 .setPositiveButton("Sí", (dialog, which) -> {
                     // Lanzamos el flujo de Google Sign-In para vincular
+                    Log.d(TAG, "User chose to link accounts. Starting Google Sign-In for linking.");
                     Intent linkIntent = googleSignInClient.getSignInIntent();
                     activityResultLauncherLinking.launch(linkIntent);
                 })
                 .setNegativeButton("No", (dialog, which) -> {
                     Toast.makeText(LogInActivity.this, "No se vincularon las cuentas.", Toast.LENGTH_SHORT).show();
+                    Log.d(TAG, "User chose not to link accounts.");
                 })
                 .setCancelable(false)
                 .show();
     }
 
-    private void navigateToMainActivity(String nombre, String email, Uri imagen) {
+    private void navigateToMainActivity() {
+        Log.d(TAG, "Navigating to MainActivity.");
+
         // Crear el Intent
         Intent intent = new Intent(LogInActivity.this, MainActivity.class);
-
-        // Agrega datos adicionales al Intent usando claves y valores
-        intent.putExtra("nombre", nombre);
-        intent.putExtra("email", email);
-        if (imagen != null) {
-            intent.putExtra("imagen", imagen.toString());
-        }
-
-        // Registrar el last_login en la base de datos
-        registrarLastLogin(auth.getCurrentUser().getUid(), nombre, email);
 
         // Lanzar el intent
         startActivity(intent);
@@ -335,6 +537,8 @@ public class LogInActivity extends AppCompatActivity {
     }
 
     private void registrarLastLogin(String userId, String name, String email) {
+        Log.d(TAG, "Registering last login for user ID: " + userId);
+
         // Obtener la fecha y hora actual en el formato deseado
         String fechaLogin = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date());
 
@@ -355,19 +559,22 @@ public class LogInActivity extends AppCompatActivity {
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("isLoggedIn", true);
         editor.apply();
+
+        Log.d(TAG, "User last login registered successfully.");
     }
 
-
     private void personalizarBotonGoogle(SignInButton button) {
+        Log.d(TAG, "Personalizing Google Sign-In button.");
+
         for (int i = 0; i < button.getChildCount(); i++) {
             View view = button.getChildAt(i);
             if (view instanceof TextView) {
                 ((TextView) view).setText("Iniciar sesión con Google");
+                Log.d(TAG, "Google Sign-In button text set.");
                 break;
             }
         }
     }
-
 
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
