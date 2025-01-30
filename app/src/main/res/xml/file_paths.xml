@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Declarar el directorio donde se guardarán las fotos, p. ej. la carpeta "Pictures" -->
+    <external-files-path
+        name="my_images"
+        path="Pictures" />
+</paths>

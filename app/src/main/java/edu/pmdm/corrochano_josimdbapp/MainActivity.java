@@ -1,13 +1,13 @@
-// Archivo: MainActivity.java
 package edu.pmdm.corrochano_josimdbapp;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
 import android.os.Bundle;
-import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -43,7 +43,6 @@ import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
 
-    // Atributos
     private AppBarConfiguration mAppBarConfiguration;
     private ActivityMainBinding binding;
     private GoogleSignInClient googleSignInClient;
@@ -58,18 +57,14 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Inflar la vista usando ViewBinding
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
 
-        // Configurar la Toolbar
         setSupportActionBar(binding.appBarMain.toolbar);
 
-        // Configurar DrawerLayout y NavigationView
         DrawerLayout drawer = binding.drawerLayout;
         NavigationView navigationView = binding.navView;
 
-        // Configurar las IDs de los destinos principales
         mAppBarConfiguration = new AppBarConfiguration.Builder(
                 R.id.nav_home,
                 R.id.nav_gallery,
@@ -78,20 +73,18 @@ public class MainActivity extends AppCompatActivity {
                 .setOpenableLayout(drawer)
                 .build();
 
-        // Configurar NavController para la navegación entre los fragments
         NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment_content_main);
         NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
         NavigationUI.setupWithNavController(navigationView, navController);
 
-        // Inicializar Auth y Google Sign-In Client
         mAuth = FirebaseAuth.getInstance();
         GoogleSignInOptions options = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                .requestIdToken(getString(R.string.default_web_client_id)) // Asegúrate de que este string coincide con el de tu Firebase
-                .requestEmail() // Solicita el email del usuario
+                .requestIdToken(getString(R.string.default_web_client_id))
+                .requestEmail()
                 .build();
         googleSignInClient = GoogleSignIn.getClient(this, options);
 
-        // Tomamos la referencia al header del NavigationView
+        // Header del NavigationView
         View headerView = navigationView.getHeaderView(0);
         textViewNombre = headerView.findViewById(R.id.textViewNombre);
         textViewEmail = headerView.findViewById(R.id.textViewEmail);
@@ -104,17 +97,19 @@ public class MainActivity extends AppCompatActivity {
         boolean isFacebookLoggedIn = (fbAccessToken != null && !fbAccessToken.isExpired());
 
         if (usuario != null) {
-            String nombre = usuario.getDisplayName();
-            String email = usuario.getEmail();
+            // 1) Tomamos el nombre de Firebase (o "Usuario" en su defecto)
+            String nombre = usuario.getDisplayName() != null ? usuario.getDisplayName() : "Usuario";
+            String email = (usuario.getEmail() != null) ? usuario.getEmail() : "Sin email";
             Uri fotoUri = usuario.getPhotoUrl();
 
-            // Si el usuario está logueado con Facebook, preferimos los datos de Facebook
+            // 2) Si está logueado con Facebook, preferimos los datos de Facebook
             if (isFacebookLoggedIn) {
                 Profile profile = Profile.getCurrentProfile();
-
                 if (profile != null) {
                     String facebookNombre = profile.getFirstName() + " " + profile.getLastName();
-                    nombre = facebookNombre.trim().isEmpty() ? "Usuario de Facebook" : facebookNombre;
+                    facebookNombre = facebookNombre.trim().isEmpty() ? "Usuario de Facebook" : facebookNombre;
+                    nombre = facebookNombre; // Sobrescribimos
+
                     email = "Conectado con Facebook";
 
                     Uri facebookFoto = profile.getProfilePictureUri(300, 300);
@@ -124,9 +119,29 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
+            // ─────────────────────────────────────────────────────────────────────
+            // 3) SOBRESCRIBIR el nombre con el que tengamos en la base local
+            // ─────────────────────────────────────────────────────────────────────
+            FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(this);
+            SQLiteDatabase db = dbHelper.getReadableDatabase();
+            Cursor cursor = db.rawQuery(
+                    "SELECT " + FavoriteDatabaseHelper.COL_NAME + " FROM " + FavoriteDatabaseHelper.TABLE_USUARIOS +
+                            " WHERE " + FavoriteDatabaseHelper.COL_USER_ID + " = ?",
+                    new String[]{ usuario.getUid() }
+            );
+            if (cursor != null && cursor.moveToFirst()) {
+                String localName = cursor.getString(0);
+                // Sólo si localName no está vacío, lo usamos
+                if (localName != null && !localName.trim().isEmpty()) {
+                    nombre = localName; // La base de datos local "gana"
+                }
+                cursor.close();
+            }
+            db.close();
+
             // Mostrar los datos en el NavigationView Header
-            textViewNombre.setText(nombre != null ? nombre : "Usuario");
-            textViewEmail.setText(email != null ? email : "Sin email");
+            textViewNombre.setText(nombre);
+            textViewEmail.setText(email);
 
             // Cargar la imagen de perfil usando Glide
             if (fotoUri != null) {
@@ -135,51 +150,33 @@ public class MainActivity extends AppCompatActivity {
                         .circleCrop()
                         .into(imageViewPhoto);
             }
+
         } else {
-            // Si el usuario es nulo, navegar al LoginActivity
+            // Usuario nulo => vamos a la pantalla de login
             navegarAlLogin();
         }
 
-        // Configurar el botón de Logout
+        // Botón Logout
         logoutButton.setOnClickListener(v -> {
-
             if (usuario != null) {
-                // Obtener el UID
                 String uid = usuario.getUid();
-
-                // Crear la fecha de logout
                 String fechaLogout = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date());
-
-                // Actualizar en la base de datos
                 FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(MainActivity.this);
                 dbHelper.updateLastLogout(uid, fechaLogout);
             }
 
-            // Actualiza las preferencias
             SharedPreferences preferences = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE);
             SharedPreferences.Editor editor = preferences.edit();
             editor.putBoolean("isLoggedIn", false);
             editor.apply();
 
-            // Cierra la sesión en Firebase
             FirebaseAuth.getInstance().signOut();
-
-            // Cierra la sesión en Google Sign-In
             googleSignInClient.signOut().addOnCompleteListener(this, task -> {
-
-                // Cerrar sesión de Facebook (si el usuario está logueado)
                 LoginManager.getInstance().logOut();
 
-                // Crear el intent para redirigir al usuario a la pantalla de LogInActivity
                 Intent intent = new Intent(MainActivity.this, LogInActivity.class);
-
-                // Limpia el historial de actividades
                 intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
-
-                // Lanzar el intent
                 startActivity(intent);
-
-                // Finalizar la actividad actual
                 finish();
             });
         });
@@ -191,23 +188,42 @@ public class MainActivity extends AppCompatActivity {
         finish();
     }
 
+    // Menú de opciones
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main, menu);
         return true;
     }
 
+    // Opción Edit User
     @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
         int id = item.getItemId();
         if (id == R.id.action_edit_user) {
             Intent intent = new Intent(MainActivity.this, EditUserActivity.class);
+
+            FirebaseUser usuario = mAuth.getCurrentUser();
+            if (usuario != null) {
+                Uri fotoUri = usuario.getPhotoUrl();
+                // Si usas la de Facebook en caso de FB, reemplázala antes
+                AccessToken fbToken = AccessToken.getCurrentAccessToken();
+                if (fbToken != null && !fbToken.isExpired()) {
+                    Profile profile = Profile.getCurrentProfile();
+                    if (profile != null) {
+                        fotoUri = profile.getProfilePictureUri(300, 300);
+                    }
+                }
+
+                // Pasar la foto como String
+                if (fotoUri != null) {
+                    intent.putExtra("EXTRA_PROFILE_PICTURE_URI", fotoUri.toString());
+                }
+            }
             startActivity(intent);
             return true;
         }
         return super.onOptionsItemSelected(item);
     }
-
 
     @Override
     public boolean onSupportNavigateUp() {

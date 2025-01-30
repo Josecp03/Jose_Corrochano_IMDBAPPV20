@@ -393,7 +393,6 @@ public class LogInActivity extends AppCompatActivity {
                                             } else {
                                                 // Error al obtener los métodos de inicio de sesión
                                                 Toast.makeText(LogInActivity.this, "Error al verificar el correo.", Toast.LENGTH_SHORT).show();
-                                                Log.e(TAG, "Failed to fetch sign-in methods.", fetchTask.getException());
                                             }
                                         });
                             } else {
@@ -437,8 +436,6 @@ public class LogInActivity extends AppCompatActivity {
             return;
         }
 
-        Log.d(TAG, "Signing in with email and password.");
-
         // Iniciar sesión con FirebaseAuth
         auth.signInWithEmailAndPassword(email, password)
                 .addOnCompleteListener(this, task -> {
@@ -457,8 +454,7 @@ public class LogInActivity extends AppCompatActivity {
                         }
                     } else {
                         // Manejar errores de inicio de sesión
-                        Log.e(TAG, "User login failed.", task.getException());
-                        Toast.makeText(LogInActivity.this, "Error al iniciar sesión: " + task.getException().getMessage(), Toast.LENGTH_LONG).show();
+                        Toast.makeText(LogInActivity.this, "Correo ya registrado con otro proveedor. Prueba otro método. ", Toast.LENGTH_LONG).show();
                     }
                 });
     }

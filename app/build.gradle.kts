@@ -53,6 +53,7 @@ dependencies {
     implementation ("com.google.code.gson:gson:2.8.9");
     implementation ("com.facebook.android:facebook-login:latest.release")
     implementation("com.hbb20:ccp:2.5.1")
+    implementation("com.googlecode.libphonenumber:libphonenumber:8.12.50")
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)

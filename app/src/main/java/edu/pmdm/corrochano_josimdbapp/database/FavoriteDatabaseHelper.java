@@ -116,4 +116,15 @@ public class FavoriteDatabaseHelper extends SQLiteOpenHelper {
         db.update(TABLE_USUARIOS, values, COL_USER_ID + "=?", new String[]{userId});
         db.close();
     }
+
+    public void updateUserName(String userId, String newName) {
+        SQLiteDatabase db = getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COL_NAME, newName);
+
+        db.update(TABLE_USUARIOS, values, COL_USER_ID + " = ?", new String[]{userId});
+        db.close();
+    }
+
+
 }
