@@ -44,21 +44,17 @@ import edu.pmdm.corrochano_josimdbapp.database.FavoriteDatabaseHelper;
 public class EditUserActivity extends AppCompatActivity {
 
     // Request codes
-    private static final int RC_CAMERA = 100;           // Para el intent de cámara
-    private static final int RC_GALLERY = 101;          // Para el intent de galería
-    private static final int RC_CAMERA_PERMISSION = 200; // Para solicitar permiso de cámara
+    private static final int RC_CAMERA          = 100; // Para el intent de cámara
+    private static final int RC_GALLERY         = 101; // Para el intent de galería
+    private static final int RC_CAMERA_PERMISSION = 200;
+    private static final int RC_SELECT_ADDRESS  = 300; // NUEVO: Para SelectAddressActivity
 
     private Uri cameraImageUri;
 
     // Vistas
-    private EditText edtName;
-    private EditText edtEmail;
-    private EditText edtAddress;
-    private EditText edtPhone;
+    private EditText edtName, edtEmail, edtAddress, edtPhone;
     private ImageView userImageView;
-    private Button btnDirection;
-    private Button btnImage;
-    private Button btnSave;
+    private Button btnDirection, btnImage, btnSave;
     private CountryCodePicker countryCodePicker;
 
     private FirebaseAuth mAuth;
@@ -71,7 +67,7 @@ public class EditUserActivity extends AppCompatActivity {
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_edit_user);
 
-        // Ajuste para insets (barras de estado/navigation)
+        // Ajuste de insets
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
@@ -93,7 +89,7 @@ public class EditUserActivity extends AppCompatActivity {
         btnSave      = findViewById(R.id.buttonSave);
         countryCodePicker = findViewById(R.id.countryCodePicker);
 
-        // Restaura prefijo país de SharedPreferences
+        // Restaurar prefijo país
         SharedPreferences prefs = getSharedPreferences("UserPrefs", MODE_PRIVATE);
         int lastCode = prefs.getInt("LAST_COUNTRY_CODE", -1);
         if (lastCode != -1) {
@@ -108,7 +104,7 @@ public class EditUserActivity extends AppCompatActivity {
             prefs.edit().putInt("LAST_COUNTRY_CODE", selectedCode).apply();
         });
 
-        // Si se pasó la foto de MainActivity, la cargamos en el ImageView
+        // Si viene foto de MainActivity, cargarla
         String photoUriString = getIntent().getStringExtra("EXTRA_PROFILE_PICTURE_URI");
         if (photoUriString != null && !photoUriString.isEmpty()) {
             Uri photoUri = Uri.parse(photoUriString);
@@ -121,14 +117,12 @@ public class EditUserActivity extends AppCompatActivity {
             String userId = currentUser.getUid();
             SQLiteDatabase db = dbHelper.getReadableDatabase();
             Cursor cursor = db.rawQuery(
-                    "SELECT " + FavoriteDatabaseHelper.COL_NAME + ", " + FavoriteDatabaseHelper.COL_EMAIL +
-                            " FROM " + FavoriteDatabaseHelper.TABLE_USUARIOS +
-                            " WHERE " + FavoriteDatabaseHelper.COL_USER_ID + " = ?",
+                    "SELECT name, email FROM t_usuarios WHERE user_id = ?",
                     new String[]{ userId }
             );
 
             if (cursor != null && cursor.moveToFirst()) {
-                String name = cursor.getString(0);
+                String name  = cursor.getString(0);
                 String email = cursor.getString(1);
 
                 edtName.setText(name);
@@ -142,6 +136,12 @@ public class EditUserActivity extends AppCompatActivity {
             }
             db.close();
         }
+
+        // Botón para abrir la actividad de Seleccionar Dirección
+        btnDirection.setOnClickListener(v -> {
+            Intent intent = new Intent(this, SelectAddressActivity.class);
+            startActivityForResult(intent, RC_SELECT_ADDRESS);
+        });
 
         // Botón para seleccionar imagen (cámara, galería, URL)
         btnImage.setOnClickListener(v -> showImageOptionsDialog());
@@ -178,9 +178,9 @@ public class EditUserActivity extends AppCompatActivity {
         });
     }
 
-    /**
-     * Muestra un diálogo con opciones para escoger la imagen: Cámara, Galería o URL.
-     */
+    //────────────────────────────────────────────────────────────────────────
+    // IMAGEN: CÁMARA, GALERÍA, URL
+    //────────────────────────────────────────────────────────────────────────
     private void showImageOptionsDialog() {
         String[] items = {"Cámara", "Galería", "URL externa"};
 
@@ -188,13 +188,13 @@ public class EditUserActivity extends AppCompatActivity {
                 .setTitle("Seleccionar imagen")
                 .setItems(items, (dialog, which) -> {
                     switch (which) {
-                        case 0:
+                        case 0: // cámara
                             openCamera();
                             break;
-                        case 1:
+                        case 1: // galería
                             openGallery();
                             break;
-                        case 2:
+                        case 2: // url
                             showUrlDialog();
                             break;
                     }
@@ -204,28 +204,23 @@ public class EditUserActivity extends AppCompatActivity {
     }
 
     /**
-     * Verifica si tenemos permiso de cámara; si no, lo pide.
-     * Si está concedido, lanza la cámara.
+     * Verifica si tenemos permiso de cámara
+     * Si no -> lo pide
+     * Si sí -> abre la cámara
      */
     private void openCamera() {
-        if (ContextCompat.checkSelfPermission(
-                this, Manifest.permission.CAMERA)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 != PackageManager.PERMISSION_GRANTED) {
 
-            // Pedir permiso
             requestPermissions(
                     new String[]{Manifest.permission.CAMERA},
                     RC_CAMERA_PERMISSION
             );
         } else {
-            // Ya tenemos permiso => lanzar cámara
             launchCameraIntent();
         }
     }
 
-    /**
-     * Lanza el intent de cámara para tomar foto y guardarla en cameraImageUri.
-     */
     private void launchCameraIntent() {
         Intent cameraIntent = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
 
@@ -248,9 +243,6 @@ public class EditUserActivity extends AppCompatActivity {
         startActivityForResult(cameraIntent, RC_CAMERA);
     }
 
-    /**
-     * Crear un archivo temporal para la foto en getExternalFilesDir(Environment.DIRECTORY_PICTURES)
-     */
     private File createTempImageFile() throws IOException {
         String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(new Date());
         String imageFileName = "IMG_" + timeStamp + "_";
@@ -258,18 +250,12 @@ public class EditUserActivity extends AppCompatActivity {
         return File.createTempFile(imageFileName, ".jpg", storageDir);
     }
 
-    /**
-     * Abre la galería para seleccionar una imagen
-     */
     private void openGallery() {
         Intent galleryIntent = new Intent(Intent.ACTION_PICK);
         galleryIntent.setType("image/*");
         startActivityForResult(galleryIntent, RC_GALLERY);
     }
 
-    /**
-     * Muestra un diálogo para introducir la URL externa de la imagen.
-     */
     private void showUrlDialog() {
         final EditText input = new EditText(this);
         input.setHint("https://ejemplo.com/foto.png");
@@ -289,31 +275,41 @@ public class EditUserActivity extends AppCompatActivity {
                 .show();
     }
 
-    /**
-     * Recoger el resultado de cámara/galería
-     */
+    //────────────────────────────────────────────────────────────────────────
+    // onActivityResult para fotos, galería y SELECT_ADDRESS
+    //────────────────────────────────────────────────────────────────────────
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
 
-        if (resultCode == RESULT_OK) {
-            if (requestCode == RC_CAMERA) {
-                // Imagen de la cámara en cameraImageUri
-                if (cameraImageUri != null) {
-                    loadImageIntoView(cameraImageUri);
+        // Si la Activity de Seleccionar dirección devolvió RESULT_OK
+        if (requestCode == RC_SELECT_ADDRESS && resultCode == RESULT_OK) {
+            if (data != null) {
+                String selectedAddress = data.getStringExtra("SELECTED_ADDRESS");
+                if (selectedAddress != null) {
+                    edtAddress.setText(selectedAddress);
                 }
-            } else if (requestCode == RC_GALLERY) {
-                // Imagen de la galería
-                if (data != null && data.getData() != null) {
-                    Uri galleryUri = data.getData();
-                    loadImageIntoView(galleryUri);
-                }
+            }
+        }
+
+        // Cámara
+        if (requestCode == RC_CAMERA && resultCode == RESULT_OK) {
+            if (cameraImageUri != null) {
+                loadImageIntoView(cameraImageUri);
+            }
+        }
+
+        // Galería
+        if (requestCode == RC_GALLERY && resultCode == RESULT_OK) {
+            if (data != null && data.getData() != null) {
+                Uri galleryUri = data.getData();
+                loadImageIntoView(galleryUri);
             }
         }
     }
 
     /**
-     * Maneja la respuesta del usuario al pedir permiso de cámara.
+     * Maneja la respuesta del usuario al pedir permiso de cámara
      */
     @Override
     public void onRequestPermissionsResult(int requestCode,
@@ -322,19 +318,16 @@ public class EditUserActivity extends AppCompatActivity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
 
         if (requestCode == RC_CAMERA_PERMISSION) {
-            if (grantResults.length > 0
-                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // Permiso concedido => lanzar cámara
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 launchCameraIntent();
             } else {
-                // Permiso denegado => notificar
                 Toast.makeText(this, "No se concedió permiso de cámara", Toast.LENGTH_SHORT).show();
             }
         }
     }
 
     /**
-     * Carga la imagen en el ImageView con Glide (circleCrop para redonda)
+     * Cargar la imagen en el ImageView con Glide
      */
     private void loadImageIntoView(Uri uri) {
         Glide.with(this)
@@ -344,7 +337,7 @@ public class EditUserActivity extends AppCompatActivity {
     }
 
     /**
-     * Valida el número de teléfono según el país seleccionado.
+     * Valida el número de teléfono según el país seleccionado
      */
     private boolean isValidPhoneNumber(String fullPhone, String selectedCountryCode) {
         if (TextUtils.isEmpty(fullPhone) || TextUtils.isEmpty(selectedCountryCode)) {
