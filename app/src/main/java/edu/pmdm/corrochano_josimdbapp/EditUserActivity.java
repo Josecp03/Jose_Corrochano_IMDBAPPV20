@@ -1,3 +1,4 @@
+// Archivo: EditUserActivity.java
 package edu.pmdm.corrochano_josimdbapp;
 
 import android.Manifest;
@@ -26,6 +27,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.i18n.phonenumbers.NumberParseException;
@@ -50,6 +52,7 @@ public class EditUserActivity extends AppCompatActivity {
     private static final int RC_SELECT_ADDRESS  = 300; // NUEVO: Para SelectAddressActivity
 
     private Uri cameraImageUri;
+    private String externalPhotoUrl = ""; // Nueva variable para almacenar la URL externa
 
     // Vistas
     private EditText edtName, edtEmail, edtAddress, edtPhone;
@@ -79,14 +82,14 @@ public class EditUserActivity extends AppCompatActivity {
         dbHelper = new FavoriteDatabaseHelper(this);
 
         // Referencias UI
-        edtName      = findViewById(R.id.editTextTextName);
-        edtEmail     = findViewById(R.id.editTextTextEmail);
-        edtAddress   = findViewById(R.id.editTextTextAddress);
-        edtPhone     = findViewById(R.id.editTextNumberPhone);
-        userImageView= findViewById(R.id.imageView);
-        btnDirection = findViewById(R.id.buttonSelectDirection);
-        btnImage     = findViewById(R.id.buttonSelectImage);
-        btnSave      = findViewById(R.id.buttonSave);
+        edtName       = findViewById(R.id.editTextTextName);
+        edtEmail      = findViewById(R.id.editTextTextEmail);
+        edtAddress    = findViewById(R.id.editTextTextAddress);
+        edtPhone      = findViewById(R.id.editTextNumberPhone);
+        userImageView = findViewById(R.id.imageView);
+        btnDirection  = findViewById(R.id.buttonSelectDirection);
+        btnImage      = findViewById(R.id.buttonSelectImage);
+        btnSave       = findViewById(R.id.buttonSave);
         countryCodePicker = findViewById(R.id.countryCodePicker);
 
         // Restaurar prefijo país
@@ -108,7 +111,17 @@ public class EditUserActivity extends AppCompatActivity {
         String photoUriString = getIntent().getStringExtra("EXTRA_PROFILE_PICTURE_URI");
         if (photoUriString != null && !photoUriString.isEmpty()) {
             Uri photoUri = Uri.parse(photoUriString);
-            Glide.with(this).load(photoUri).circleCrop().into(userImageView);
+            Glide.with(this)
+                    .load(photoUri)
+                    .diskCacheStrategy(DiskCacheStrategy.NONE) // Evita la caché en disco
+                    .skipMemoryCache(true)                    // Evita la caché en memoria
+                    .circleCrop()
+                    .into(userImageView);
+            if (photoUriString.startsWith("http")) {
+                externalPhotoUrl = photoUriString; // Asignar la URL externa
+            } else {
+                cameraImageUri = photoUri; // Asignar la URI local
+            }
         }
 
         // Cargar datos del usuario en la base local
@@ -117,20 +130,37 @@ public class EditUserActivity extends AppCompatActivity {
             String userId = currentUser.getUid();
             SQLiteDatabase db = dbHelper.getReadableDatabase();
             Cursor cursor = db.rawQuery(
-                    "SELECT name, email FROM t_usuarios WHERE user_id = ?",
+                    "SELECT name, email, " + FavoriteDatabaseHelper.COL_PHONE + ", " +
+                            FavoriteDatabaseHelper.COL_ADDRESS + ", " + FavoriteDatabaseHelper.COL_PHOTO_URL +
+                            " FROM " + FavoriteDatabaseHelper.TABLE_USUARIOS +
+                            " WHERE " + FavoriteDatabaseHelper.COL_USER_ID + " = ?",
                     new String[]{ userId }
             );
 
             if (cursor != null && cursor.moveToFirst()) {
-                String name  = cursor.getString(0);
-                String email = cursor.getString(1);
+                String name     = cursor.getString(0);
+                String email    = cursor.getString(1);
+                String phone    = cursor.getString(2);
+                String address  = cursor.getString(3);
+                String photoUrl = cursor.getString(4);
 
                 edtName.setText(name);
                 edtEmail.setText(email);
+                edtPhone.setText(phone);
+                edtAddress.setText(address);
                 // Bloquear el email (solo lectura)
                 edtEmail.setKeyListener(null);
                 edtEmail.setFocusable(false);
                 edtEmail.setCursorVisible(false);
+
+                if (photoUrl != null && !photoUrl.isEmpty()) {
+                    loadImageIntoView(Uri.parse(photoUrl));
+                    if (photoUrl.startsWith("http")) {
+                        externalPhotoUrl = photoUrl; // Asignar la URL externa
+                    } else {
+                        cameraImageUri = Uri.parse(photoUrl); // Asignar la URI local
+                    }
+                }
 
                 cursor.close();
             }
@@ -151,9 +181,10 @@ public class EditUserActivity extends AppCompatActivity {
             // Validar phone
             String phoneNumber = edtPhone.getText().toString().trim();
             String countryCode = countryCodePicker.getSelectedCountryCode();
+            String selectedCountryNameCode = countryCodePicker.getSelectedCountryNameCode();
             String fullPhone = "+" + countryCode + phoneNumber;
 
-            if (!isValidPhoneNumber(fullPhone, countryCodePicker.getSelectedCountryNameCode())) {
+            if (!isValidPhoneNumber(fullPhone, selectedCountryNameCode)) {
                 Toast.makeText(this, "Número de teléfono inválido para el país seleccionado", Toast.LENGTH_SHORT).show();
                 return;
             }
@@ -165,9 +196,30 @@ public class EditUserActivity extends AppCompatActivity {
                 return;
             }
 
+            // Obtener otros campos
+            String newAddress = edtAddress.getText().toString().trim();
+
+            // Obtener foto URL (puede ser una URI local o una URL externa)
+            String photoUrl = "";
+            if (cameraImageUri != null) {
+                photoUrl = cameraImageUri.toString();
+            } else if (!externalPhotoUrl.isEmpty()) {
+                photoUrl = externalPhotoUrl;
+            }
+
             // Actualizar en la base de datos local
-            if (currentUser != null) {
-                dbHelper.updateUserName(currentUser.getUid(), newName);
+            FirebaseUser user = mAuth.getCurrentUser(); // Renombrado a 'user'
+            if (user != null) {
+                dbHelper.insertOrUpdateUser(
+                        user.getUid(),
+                        newName,
+                        edtEmail.getText().toString().trim(),
+                        getCurrentTimestamp(),
+                        getCurrentTimestamp(),
+                        phoneNumber,
+                        newAddress,
+                        photoUrl
+                );
             }
 
             Toast.makeText(this, "Datos guardados correctamente.", Toast.LENGTH_SHORT).show();
@@ -266,6 +318,7 @@ public class EditUserActivity extends AppCompatActivity {
                 .setPositiveButton("OK", (dialog, which) -> {
                     String url = input.getText().toString().trim();
                     if (!url.isEmpty()) {
+                        externalPhotoUrl = url; // Almacenar la URL externa
                         loadImageIntoView(Uri.parse(url));
                     } else {
                         Toast.makeText(this, "URL vacía", Toast.LENGTH_SHORT).show();
@@ -296,6 +349,7 @@ public class EditUserActivity extends AppCompatActivity {
         if (requestCode == RC_CAMERA && resultCode == RESULT_OK) {
             if (cameraImageUri != null) {
                 loadImageIntoView(cameraImageUri);
+                externalPhotoUrl = ""; // Limpiar la URL externa si se tomó una foto con cámara
             }
         }
 
@@ -304,6 +358,7 @@ public class EditUserActivity extends AppCompatActivity {
             if (data != null && data.getData() != null) {
                 Uri galleryUri = data.getData();
                 loadImageIntoView(galleryUri);
+                externalPhotoUrl = ""; // Limpiar la URL externa si se seleccionó una imagen de la galería
             }
         }
     }
@@ -332,6 +387,8 @@ public class EditUserActivity extends AppCompatActivity {
     private void loadImageIntoView(Uri uri) {
         Glide.with(this)
                 .load(uri)
+                .diskCacheStrategy(DiskCacheStrategy.NONE) // Evita la caché en disco
+                .skipMemoryCache(true)                    // Evita la caché en memoria
                 .circleCrop()
                 .into(userImageView);
     }
@@ -352,5 +409,13 @@ public class EditUserActivity extends AppCompatActivity {
             e.printStackTrace();
             return false;
         }
+    }
+
+    /**
+     * Obtener el timestamp actual
+     */
+    private String getCurrentTimestamp() {
+        SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
+        return sdf.format(new Date());
     }
 }

@@ -1,3 +1,4 @@
+// Archivo: MainActivity.java
 package edu.pmdm.corrochano_josimdbapp;
 
 import android.annotation.SuppressLint;
@@ -24,6 +25,7 @@ import androidx.navigation.ui.AppBarConfiguration;
 import androidx.navigation.ui.NavigationUI;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.engine.DiskCacheStrategy;
 import com.facebook.AccessToken;
 import com.facebook.Profile;
 import com.facebook.login.LoginManager;
@@ -91,7 +93,46 @@ public class MainActivity extends AppCompatActivity {
         imageViewPhoto = headerView.findViewById(R.id.imageViewPhoto);
         logoutButton = headerView.findViewById(R.id.buttonLogout);
 
-        // Obtener datos del usuario actual
+        // Cargar los datos del usuario
+        loadUserData();
+
+        // Botón Logout
+        logoutButton.setOnClickListener(v -> {
+            FirebaseUser usuario = mAuth.getCurrentUser();
+            if (usuario != null) {
+                String uid = usuario.getUid();
+                String fechaLogout = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date());
+                FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(MainActivity.this);
+                dbHelper.updateLastLogout(uid, fechaLogout);
+                // dbHelper.updatePhotoUrl(uid, ""); // Eliminar o comentar esta línea para mantener la foto de perfil
+            }
+
+            SharedPreferences preferences = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE);
+            SharedPreferences.Editor editor = preferences.edit();
+            editor.putBoolean("isLoggedIn", false);
+            editor.apply();
+
+            FirebaseAuth.getInstance().signOut();
+            googleSignInClient.signOut().addOnCompleteListener(this, task -> {
+                LoginManager.getInstance().logOut();
+
+                // Limpiar los datos del NavigationView Header
+                textViewNombre.setText("");
+                textViewEmail.setText("");
+
+                Intent intent = new Intent(MainActivity.this, LogInActivity.class);
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+                finish();
+            });
+        });
+    }
+
+    /**
+     * Método para cargar los datos del usuario desde Firebase y la base de datos local.
+     * Se llama en onCreate() y onResume() para asegurar que los datos estén actualizados.
+     */
+    private void loadUserData() {
         FirebaseUser usuario = mAuth.getCurrentUser();
         AccessToken fbAccessToken = AccessToken.getCurrentAccessToken();
         boolean isFacebookLoggedIn = (fbAccessToken != null && !fbAccessToken.isExpired());
@@ -119,21 +160,25 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            // ─────────────────────────────────────────────────────────────────────
-            // 3) SOBRESCRIBIR el nombre con el que tengamos en la base local
-            // ─────────────────────────────────────────────────────────────────────
+            // 3) SOBRESCRIBIR el nombre y foto con el que tengamos en la base local
             FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(this);
             SQLiteDatabase db = dbHelper.getReadableDatabase();
             Cursor cursor = db.rawQuery(
-                    "SELECT " + FavoriteDatabaseHelper.COL_NAME + " FROM " + FavoriteDatabaseHelper.TABLE_USUARIOS +
+                    "SELECT " + FavoriteDatabaseHelper.COL_NAME + ", " +
+                            FavoriteDatabaseHelper.COL_PHOTO_URL +
+                            " FROM " + FavoriteDatabaseHelper.TABLE_USUARIOS +
                             " WHERE " + FavoriteDatabaseHelper.COL_USER_ID + " = ?",
                     new String[]{ usuario.getUid() }
             );
             if (cursor != null && cursor.moveToFirst()) {
                 String localName = cursor.getString(0);
-                // Sólo si localName no está vacío, lo usamos
+                String localPhotoUrl = cursor.getString(1);
+                // Solo si localName no está vacío, lo usamos
                 if (localName != null && !localName.trim().isEmpty()) {
                     nombre = localName; // La base de datos local "gana"
+                }
+                if (localPhotoUrl != null && !localPhotoUrl.trim().isEmpty()) {
+                    fotoUri = Uri.parse(localPhotoUrl);
                 }
                 cursor.close();
             }
@@ -143,10 +188,12 @@ public class MainActivity extends AppCompatActivity {
             textViewNombre.setText(nombre);
             textViewEmail.setText(email);
 
-            // Cargar la imagen de perfil usando Glide
-            if (fotoUri != null) {
+            // Cargar la imagen de perfil usando Glide, evitando la caché para actualizar la foto
+            if (fotoUri != null && !fotoUri.toString().isEmpty()) {
                 Glide.with(this)
                         .load(fotoUri)
+                        .diskCacheStrategy(DiskCacheStrategy.NONE) // Evita la caché en disco
+                        .skipMemoryCache(true)                    // Evita la caché en memoria
                         .circleCrop()
                         .into(imageViewPhoto);
             }
@@ -155,33 +202,21 @@ public class MainActivity extends AppCompatActivity {
             // Usuario nulo => vamos a la pantalla de login
             navegarAlLogin();
         }
-
-        // Botón Logout
-        logoutButton.setOnClickListener(v -> {
-            if (usuario != null) {
-                String uid = usuario.getUid();
-                String fechaLogout = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date());
-                FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(MainActivity.this);
-                dbHelper.updateLastLogout(uid, fechaLogout);
-            }
-
-            SharedPreferences preferences = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE);
-            SharedPreferences.Editor editor = preferences.edit();
-            editor.putBoolean("isLoggedIn", false);
-            editor.apply();
-
-            FirebaseAuth.getInstance().signOut();
-            googleSignInClient.signOut().addOnCompleteListener(this, task -> {
-                LoginManager.getInstance().logOut();
-
-                Intent intent = new Intent(MainActivity.this, LogInActivity.class);
-                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(intent);
-                finish();
-            });
-        });
     }
 
+    /**
+     * Método llamado cuando la actividad se reanuda.
+     * Se utiliza para recargar los datos del usuario y reflejar cualquier cambio.
+     */
+    @Override
+    protected void onResume() {
+        super.onResume();
+        loadUserData();
+    }
+
+    /**
+     * Método para navegar a la actividad de login.
+     */
     private void navegarAlLogin(){
         Intent intent = new Intent(MainActivity.this, LogInActivity.class);
         startActivity(intent);

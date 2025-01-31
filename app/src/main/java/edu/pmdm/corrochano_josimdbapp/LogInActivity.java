@@ -1,9 +1,12 @@
+// Archivo: LogInActivity.java
 package edu.pmdm.corrochano_josimdbapp;
 
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
@@ -104,11 +107,12 @@ public class LogInActivity extends AppCompatActivity {
                                         String nombre = authInstance.getDisplayName();
                                         String email = authInstance.getEmail();
                                         Uri imagen = authInstance.getPhotoUrl();
+                                        String photoUrl = (imagen != null) ? imagen.toString() : "";
 
                                         Log.d(TAG, "User Info - Name: " + nombre + ", Email: " + email);
 
-                                        // Registrar el last_login en la base de datos
-                                        registrarLastLogin(authInstance.getUid(), nombre, email);
+                                        // Registrar el last_login y photo_url en la base de datos
+                                        registrarLastLogin(authInstance.getUid(), nombre, email, photoUrl);
 
                                         // Llamada al método que nos manda a la actividad principal
                                         navigateToMainActivity();
@@ -170,7 +174,8 @@ public class LogInActivity extends AppCompatActivity {
                                                 Toast.makeText(LogInActivity.this, "Cuentas vinculadas correctamente.", Toast.LENGTH_SHORT).show();
 
                                                 // Registrar el last_login en la base de datos
-                                                registrarLastLogin(currentUser.getUid(), currentUser.getDisplayName(), currentUser.getEmail());
+                                                registrarLastLogin(currentUser.getUid(), currentUser.getDisplayName(), currentUser.getEmail(),
+                                                        (currentUser.getPhotoUrl() != null) ? currentUser.getPhotoUrl().toString() : "");
 
                                                 navigateToMainActivity();
                                             } else {
@@ -232,7 +237,7 @@ public class LogInActivity extends AppCompatActivity {
         btnGoogle = findViewById(R.id.sign_in_button);
         btnFacebook = findViewById(R.id.login_button);
         btnFacebook.setReadPermissions("email", "public_profile");
-        Log.d(TAG, "Buttons and EditTexts initialized.");
+        Log.d(TAG, "Buttons initialized.");
 
         // Campos de correo y contraseña
         editTextEmail = findViewById(R.id.editTextEmail);
@@ -308,6 +313,9 @@ public class LogInActivity extends AppCompatActivity {
         });
     }
 
+    /**
+     * Método para registrar un nuevo usuario con correo electrónico y contraseña.
+     */
     private void registrarUsuario() {
         Log.d(TAG, "Starting user registration.");
 
@@ -354,11 +362,14 @@ public class LogInActivity extends AppCompatActivity {
                         FirebaseUser usuario = auth.getCurrentUser();
                         if (usuario != null) {
                             String uid = usuario.getUid();
-                            String nombre = usuario.getEmail().split("@")[0]; // Puedes personalizar esto
+                            String nombre = usuario.getDisplayName();
+                            if (nombre == null || nombre.isEmpty()) {
+                                nombre = email.split("@")[0]; // Puedes personalizar esto
+                            }
                             String emailUser = usuario.getEmail();
 
-                            // Registrar en la base de datos local
-                            registrarLastLogin(uid, nombre, emailUser);
+                            // Registrar en la base de datos local con campos nuevos vacíos
+                            registrarUsuarioEnBaseDatos(uid, nombre, emailUser);
 
                             Toast.makeText(LogInActivity.this, "Registro exitoso.", Toast.LENGTH_SHORT).show();
 
@@ -371,7 +382,6 @@ public class LogInActivity extends AppCompatActivity {
                         if (task.getException() instanceof FirebaseAuthUserCollisionException) {
                             // El correo ya está registrado
                             FirebaseAuthUserCollisionException exception = (FirebaseAuthUserCollisionException) task.getException();
-                            // String existingEmail = exception.getEmail(); // Esta línea ya no es segura
                             String existingEmail = email; // Usar el email ingresado por el usuario
 
                             Log.d(TAG, "Email already registered: " + existingEmail);
@@ -407,7 +417,36 @@ public class LogInActivity extends AppCompatActivity {
                 });
     }
 
+    /**
+     * Método para insertar un nuevo usuario en la base de datos con los nuevos campos vacíos.
+     */
+    private void registrarUsuarioEnBaseDatos(String userId, String name, String email) {
+        Log.d(TAG, "Registering user in local database.");
 
+        // Obtener la fecha y hora actual en el formato deseado
+        String fechaLogin = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date());
+
+        // Crear una instancia del helper de la base de datos
+        FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(this);
+
+        // Insertar el usuario en la base de datos con los nuevos campos vacíos
+        dbHelper.insertOrUpdateUser(
+                userId,
+                name,
+                email,
+                fechaLogin,
+                null,
+                "", // phone
+                "", // address
+                ""  // photo_url
+        );
+
+        Log.d(TAG, "User registered in local database successfully.");
+    }
+
+    /**
+     * Método para iniciar sesión con correo electrónico y contraseña.
+     */
     private void iniciarSesion() {
         Log.d(TAG, "Starting user login.");
 
@@ -444,8 +483,15 @@ public class LogInActivity extends AppCompatActivity {
                         Log.d(TAG, "User login successful.");
                         FirebaseUser usuario = auth.getCurrentUser();
                         if (usuario != null) {
+                            String uid = usuario.getUid();
+                            String nombre = usuario.getDisplayName();
+                            if (nombre == null || nombre.isEmpty()) {
+                                nombre = email.split("@")[0]; // Puedes personalizar esto
+                            }
+                            String emailUser = usuario.getEmail();
+
                             // Registrar el last_login en la base de datos
-                            registrarLastLogin(usuario.getUid(), usuario.getEmail().split("@")[0], usuario.getEmail());
+                            registrarLastLogin(uid, nombre, emailUser, null); // photo_url no se actualiza aquí
 
                             Toast.makeText(LogInActivity.this, "Inicio de sesión exitoso.", Toast.LENGTH_SHORT).show();
 
@@ -454,12 +500,23 @@ public class LogInActivity extends AppCompatActivity {
                         }
                     } else {
                         // Manejar errores de inicio de sesión
-                        Toast.makeText(LogInActivity.this, "Correo ya registrado con otro proveedor. Prueba otro método. ", Toast.LENGTH_LONG).show();
+                        Log.e(TAG, "User login failed.", task.getException());
+
+                        if (task.getException() instanceof FirebaseAuthUserCollisionException) {
+                            FirebaseAuthUserCollisionException collisionEx = (FirebaseAuthUserCollisionException) task.getException();
+                            String existingEmail = collisionEx.getEmail();
+                            Log.d(TAG, "Email collision detected: " + existingEmail);
+                            // Puedes manejar colisiones aquí si es necesario
+                        }
+
+                        Toast.makeText(LogInActivity.this, "Error al iniciar sesión: " + task.getException().getMessage(), Toast.LENGTH_LONG).show();
                     }
                 });
     }
 
-
+    /**
+     * Método para manejar el token de acceso de Facebook.
+     */
     private void handleFacebookAccessToken(AccessToken token) {
         Log.d(TAG, "Handling Facebook access token.");
 
@@ -473,9 +530,10 @@ public class LogInActivity extends AppCompatActivity {
                     String nombre = usuario.getDisplayName();
                     String email = usuario.getEmail();
                     Uri imagen = usuario.getPhotoUrl();
+                    String photoUrl = (imagen != null) ? imagen.toString() : "";
 
-                    // Registrar el last_login en la base de datos
-                    registrarLastLogin(usuario.getUid(), nombre, email);
+                    // Registrar el last_login y photo_url en la base de datos
+                    registrarLastLogin(usuario.getUid(), nombre, email, photoUrl);
 
                     // Llamada al método para irnos a la actividad principal
                     navigateToMainActivity();
@@ -498,6 +556,7 @@ public class LogInActivity extends AppCompatActivity {
             }
         });
     }
+
 
     private void mostrarDialogoVinculacion(String email) {
         Log.d(TAG, "Showing account linking dialog for email: " + email);
@@ -532,7 +591,11 @@ public class LogInActivity extends AppCompatActivity {
         finish();
     }
 
-    private void registrarLastLogin(String userId, String name, String email) {
+    /**
+     * Método para registrar el last_login y photo_url en la base de datos.
+     * Modificación: Solo actualizar photo_url si no está ya establecido.
+     */
+    private void registrarLastLogin(String userId, String name, String email, String photoUrl) {
         Log.d(TAG, "Registering last login for user ID: " + userId);
 
         // Obtener la fecha y hora actual en el formato deseado
@@ -541,14 +604,50 @@ public class LogInActivity extends AppCompatActivity {
         // Crear una instancia del helper de la base de datos
         FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(this);
 
-        // Insertar o actualizar el usuario en la tabla t_usuarios
-        dbHelper.insertOrUpdateUser(
-                userId,
-                name,
-                email,
-                fechaLogin,
-                null
-        );
+        // Verificar si el usuario ya existe en la base de datos
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        Cursor cursor = db.rawQuery("SELECT " + FavoriteDatabaseHelper.COL_PHONE + ", " +
+                FavoriteDatabaseHelper.COL_ADDRESS + ", " + FavoriteDatabaseHelper.COL_PHOTO_URL +
+                " FROM " + FavoriteDatabaseHelper.TABLE_USUARIOS +
+                " WHERE " + FavoriteDatabaseHelper.COL_USER_ID + " = ?", new String[]{userId});
+
+        String phone = null;
+        String address = null;
+        String existingPhotoUrl = null;
+
+        if (cursor != null && cursor.moveToFirst()) {
+            phone = cursor.getString(0);
+            address = cursor.getString(1);
+            existingPhotoUrl = cursor.getString(2);
+            cursor.close();
+        }
+
+        db.close();
+
+        if (phone == null && address == null && existingPhotoUrl == null) {
+            // No existe, insertar con campos proporcionados y los nuevos campos
+            dbHelper.insertOrUpdateUser(
+                    userId,
+                    name,
+                    email,
+                    fechaLogin,
+                    null,
+                    "", // phone
+                    "", // address
+                    (photoUrl != null) ? photoUrl : ""
+            );
+            Log.d(TAG, "User inserted into local database with default fields.");
+        } else {
+            // Existe, actualizar last_login
+            dbHelper.updateLastLogin(userId, fechaLogin);
+            Log.d(TAG, "User's last_login updated in local database.");
+
+            // Opcional: Actualizar photo_url solo si no está establecido previamente
+            if (photoUrl != null && !photoUrl.isEmpty() && existingPhotoUrl == null) {
+                dbHelper.updatePhotoUrl(userId, photoUrl);
+                Log.d(TAG, "User's photo_url updated in local database.");
+            }
+        }
 
         // Actualizar las preferencias
         SharedPreferences preferences = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE);
@@ -558,6 +657,7 @@ public class LogInActivity extends AppCompatActivity {
 
         Log.d(TAG, "User last login registered successfully.");
     }
+
 
     private void personalizarBotonGoogle(SignInButton button) {
         Log.d(TAG, "Personalizing Google Sign-In button.");

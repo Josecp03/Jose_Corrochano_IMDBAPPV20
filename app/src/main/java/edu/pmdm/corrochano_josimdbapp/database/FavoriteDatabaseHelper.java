@@ -6,12 +6,11 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
-
 import androidx.annotation.Nullable;
 
 public class FavoriteDatabaseHelper extends SQLiteOpenHelper {
 
-    private static final int DATABASE_VERSION = 6;
+    private static final int DATABASE_VERSION = 11; // Incrementa la versión a 11
     private static final String DATABASE_NOMBRE = "peliculas.db";
     public static final String TABLE_FAVORITOS = "t_favoritos";
     public static final String TABLE_USUARIOS = "t_usuarios";
@@ -20,6 +19,9 @@ public class FavoriteDatabaseHelper extends SQLiteOpenHelper {
     public static final String COL_EMAIL = "email";
     public static final String COL_LAST_LOGIN = "last_login";
     public static final String COL_LAST_LOGOUT = "last_logout";
+    public static final String COL_PHONE = "phone";           // Nuevo campo telefono
+    public static final String COL_ADDRESS = "address";       // Nuevo campo direccion
+    public static final String COL_PHOTO_URL = "photo_url";   // Nuevo campo foto URL
 
     public FavoriteDatabaseHelper(@Nullable Context context) {
         super(context, DATABASE_NOMBRE, null, DATABASE_VERSION);
@@ -35,23 +37,29 @@ public class FavoriteDatabaseHelper extends SQLiteOpenHelper {
                 "portadaURL TEXT NOT NULL," +
                 "PRIMARY KEY (idUsuario, idPelicula))");
 
-        // Crear tabla de usuarios
+        // Crear tabla de usuarios con nuevos campos
         db.execSQL("CREATE TABLE " + TABLE_USUARIOS + "(" +
                 COL_USER_ID + " TEXT PRIMARY KEY," +
                 COL_NAME + " TEXT," +
                 COL_EMAIL + " TEXT," +
                 COL_LAST_LOGIN + " TEXT," +
-                COL_LAST_LOGOUT + " TEXT" +
+                COL_LAST_LOGOUT + " TEXT," +
+                COL_PHONE + " TEXT," +         // Nuevo campo telefono
+                COL_ADDRESS + " TEXT," +       // Nuevo campo direccion
+                COL_PHOTO_URL + " TEXT" +       // Nuevo campo foto URL
                 ")");
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        if (oldVersion < 6) {
-            db.execSQL("DROP TABLE IF EXISTS " + TABLE_FAVORITOS);
-            db.execSQL("DROP TABLE IF EXISTS " + TABLE_USUARIOS);
-            onCreate(db);
+        if (oldVersion < 11) { // Verificar si la actualización es necesaria
+            // Agregar nuevas columnas a la tabla de usuarios
+            db.execSQL("ALTER TABLE " + TABLE_USUARIOS + " ADD COLUMN " + COL_PHONE + " TEXT");
+            db.execSQL("ALTER TABLE " + TABLE_USUARIOS + " ADD COLUMN " + COL_ADDRESS + " TEXT");
+            db.execSQL("ALTER TABLE " + TABLE_USUARIOS + " ADD COLUMN " + COL_PHOTO_URL + " TEXT");
         }
+
+        // Manejar futuras actualizaciones de versión aquí
     }
 
     public long insertarFavorito(SQLiteDatabase db,
@@ -69,8 +77,8 @@ public class FavoriteDatabaseHelper extends SQLiteOpenHelper {
         return db.insert(TABLE_FAVORITOS, null, valores);
     }
 
-
-    public void insertOrUpdateUser(String userId, String name, String email, String lastLogin, String lastLogout) {
+    public void insertOrUpdateUser(String userId, String name, String email, String lastLogin, String lastLogout,
+                                   String phone, String address, String photoUrl) {
         SQLiteDatabase db = getWritableDatabase();
 
         // Primero comprobamos si el usuario ya existe
@@ -86,6 +94,9 @@ public class FavoriteDatabaseHelper extends SQLiteOpenHelper {
         values.put(COL_EMAIL, email);
         values.put(COL_LAST_LOGIN, lastLogin);
         values.put(COL_LAST_LOGOUT, lastLogout);
+        values.put(COL_PHONE, phone);           // Insertar telefono
+        values.put(COL_ADDRESS, address);       // Insertar direccion
+        values.put(COL_PHOTO_URL, photoUrl);    // Insertar foto URL
 
         if (!existe) {
             // Insertar nuevo
@@ -107,7 +118,6 @@ public class FavoriteDatabaseHelper extends SQLiteOpenHelper {
         db.close();
     }
 
-
     public void updateLastLogout(String userId, String lastLogout) {
         SQLiteDatabase db = getWritableDatabase();
         ContentValues values = new ContentValues();
@@ -126,5 +136,29 @@ public class FavoriteDatabaseHelper extends SQLiteOpenHelper {
         db.close();
     }
 
+    // Métodos adicionales para actualizar nuevos campos (Opcional)
 
+    public void updatePhone(String userId, String phone) {
+        SQLiteDatabase db = getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COL_PHONE, phone);
+        db.update(TABLE_USUARIOS, values, COL_USER_ID + "=?", new String[]{userId});
+        db.close();
+    }
+
+    public void updateAddress(String userId, String address) {
+        SQLiteDatabase db = getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COL_ADDRESS, address);
+        db.update(TABLE_USUARIOS, values, COL_USER_ID + "=?", new String[]{userId});
+        db.close();
+    }
+
+    public void updatePhotoUrl(String userId, String photoUrl) {
+        SQLiteDatabase db = getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put(COL_PHOTO_URL, photoUrl);
+        db.update(TABLE_USUARIOS, values, COL_USER_ID + "=?", new String[]{userId});
+        db.close();
+    }
 }
