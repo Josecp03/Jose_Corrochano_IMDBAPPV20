@@ -18,6 +18,10 @@ import android.widget.ImageView;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
+import androidx.activity.result.ActivityResult;
+import androidx.activity.result.ActivityResultCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
@@ -50,6 +54,7 @@ public class EditUserActivity extends AppCompatActivity {
     private static final int RC_GALLERY         = 101;
     private static final int RC_CAMERA_PERMISSION = 200;
     private static final int RC_SELECT_ADDRESS  = 300;
+    private static final int RC_LOCATION_PERMISSION = 400; // Nuevo: Código de solicitud para permisos de ubicación
 
     private Uri cameraImageUri;
     private String externalPhotoUrl = "";
@@ -177,8 +182,21 @@ public class EditUserActivity extends AppCompatActivity {
 
         // Botón para abrir la actividad de Seleccionar Dirección
         btnDirection.setOnClickListener(v -> {
-            Intent intent = new Intent(this, SelectAddressActivity.class);
-            startActivityForResult(intent, RC_SELECT_ADDRESS);
+            // Verificar permisos de ubicación
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+                    != PackageManager.PERMISSION_GRANTED ||
+                    ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
+                            != PackageManager.PERMISSION_GRANTED) {
+
+                // Solicitar permisos
+                requestPermissions(
+                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION},
+                        RC_LOCATION_PERMISSION
+                );
+            } else {
+                // Permisos ya concedidos, abrir la actividad
+                abrirSelectAddressActivity();
+            }
         });
 
         // Botón para seleccionar imagen (cámara, galería, URL)
@@ -225,7 +243,7 @@ public class EditUserActivity extends AppCompatActivity {
             }
 
             // Actualizar en la base de datos local
-            FirebaseUser user = mAuth.getCurrentUser(); // Renombrado a 'user'
+            FirebaseUser user = mAuth.getCurrentUser();
             if (user != null) {
                 dbHelper.insertOrUpdateUser(
                         user.getUid(),
@@ -245,6 +263,14 @@ public class EditUserActivity extends AppCompatActivity {
             startActivity(new Intent(this, MainActivity.class));
             finish();
         });
+    }
+
+    /**
+     * Método para abrir la actividad SelectAddressActivity
+     */
+    private void abrirSelectAddressActivity() {
+        Intent intent = new Intent(this, SelectAddressActivity.class);
+        startActivityForResult(intent, RC_SELECT_ADDRESS);
     }
 
     //────────────────────────────────────────────────────────────────────────
@@ -381,7 +407,7 @@ public class EditUserActivity extends AppCompatActivity {
     }
 
     /**
-     * Maneja la respuesta del usuario al pedir permiso de cámara
+     * Maneja la respuesta del usuario al pedir permisos
      */
     @Override
     public void onRequestPermissionsResult(int requestCode,
@@ -394,6 +420,17 @@ public class EditUserActivity extends AppCompatActivity {
                 launchCameraIntent();
             } else {
                 Toast.makeText(this, "No se concedió permiso de cámara", Toast.LENGTH_SHORT).show();
+            }
+        }
+
+        if (requestCode == RC_LOCATION_PERMISSION) {
+            if (grantResults.length > 0
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED
+                    && grantResults[1] == PackageManager.PERMISSION_GRANTED) {
+                // Permisos concedidos, abrir la actividad
+                abrirSelectAddressActivity();
+            } else {
+                Toast.makeText(this, "Permisos de ubicación necesarios para seleccionar dirección", Toast.LENGTH_SHORT).show();
             }
         }
     }

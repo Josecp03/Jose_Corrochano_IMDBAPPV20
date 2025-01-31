@@ -1,44 +1,51 @@
 package edu.pmdm.corrochano_josimdbapp;
 
+import android.content.Intent;
 import android.location.Address;
 import android.location.Geocoder;
 import android.os.Bundle;
-import android.text.TextUtils;
-import android.widget.Button;
-import android.widget.EditText;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.google.android.gms.common.api.Status;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
-import com.google.android.gms.maps.SupportMapFragment; // Si usas SupportMapFragment
+import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.MarkerOptions;
+import com.google.android.libraries.places.api.Places;
+import com.google.android.libraries.places.api.model.Place;
+import com.google.android.libraries.places.widget.AutocompleteSupportFragment;
+import com.google.android.libraries.places.widget.listener.PlaceSelectionListener;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 
 public class SelectAddressActivity extends AppCompatActivity implements OnMapReadyCallback {
 
     private GoogleMap mMap;
-    private EditText editTextSearch;
-    private Button buttonSearch, buttonConfirm;
-
-    // Guardamos la última ubicación elegida
     private LatLng selectedLatLng;
+    private String selectedAddress;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_select_address);
+
+        // Inicializar Places SDK
+        if (!Places.isInitialized()) {
+            Places.initialize(getApplicationContext(), getString(R.string.google_maps_key));
+        }
 
         // Ajustar insets
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
@@ -47,11 +54,34 @@ public class SelectAddressActivity extends AppCompatActivity implements OnMapRea
             return insets;
         });
 
-        editTextSearch = findViewById(R.id.editTextSearchAddress);
-        buttonSearch   = findViewById(R.id.buttonSearchAddress);
-        buttonConfirm  = findViewById(R.id.buttonConfirmAddress);
+        // Configurar AutocompleteSupportFragment
+        AutocompleteSupportFragment autocompleteFragment = (AutocompleteSupportFragment)
+                getSupportFragmentManager().findFragmentById(R.id.autocomplete_fragment);
 
-        // Iniciar el fragment de mapa
+        autocompleteFragment.setPlaceFields(Arrays.asList(Place.Field.ID, Place.Field.NAME, Place.Field.ADDRESS, Place.Field.LAT_LNG));
+        autocompleteFragment.setHint("Buscar dirección...");
+        autocompleteFragment.setOnPlaceSelectedListener(new PlaceSelectionListener() {
+            @Override
+            public void onPlaceSelected(@NonNull Place place) {
+                // Obtener la ubicación seleccionada
+                selectedAddress = place.getAddress();
+                LatLng latLng = place.getLatLng();
+
+                if (latLng != null) {
+                    selectedLatLng = latLng;
+                    mMap.clear();
+                    mMap.addMarker(new MarkerOptions().position(latLng).title(selectedAddress));
+                    mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 14f));
+                }
+            }
+
+            @Override
+            public void onError(@NonNull Status status) {
+                Toast.makeText(SelectAddressActivity.this, "Error: " + status.getStatusMessage(), Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        // Inicializar el mapa
         SupportMapFragment mapFragment = (SupportMapFragment)
                 getSupportFragmentManager().findFragmentById(R.id.map);
 
@@ -59,31 +89,12 @@ public class SelectAddressActivity extends AppCompatActivity implements OnMapRea
             mapFragment.getMapAsync(this);
         }
 
-        // Botón Buscar
-        buttonSearch.setOnClickListener(v -> {
-            String query = editTextSearch.getText().toString().trim();
-            if (!TextUtils.isEmpty(query)) {
-                searchAddress(query);
-            } else {
-                Toast.makeText(this, "Introduce alguna dirección", Toast.LENGTH_SHORT).show();
-            }
-        });
-
-        // Botón Confirmar
-        buttonConfirm.setOnClickListener(v -> {
-            if (selectedLatLng != null) {
-                // Obtener la dirección final como String
-                String finalAddress = getAddressFromLatLng(
-                        selectedLatLng.latitude, selectedLatLng.longitude
-                );
-                if (!TextUtils.isEmpty(finalAddress)) {
-                    // Devolver a EditUserActivity
-                    getIntent().putExtra("SELECTED_ADDRESS", finalAddress);
-                    setResult(RESULT_OK, getIntent());
-                    finish();
-                } else {
-                    Toast.makeText(this, "No se pudo obtener dirección", Toast.LENGTH_SHORT).show();
-                }
+        findViewById(R.id.buttonConfirmAddress).setOnClickListener(v -> {
+            if (selectedLatLng != null && selectedAddress != null) {
+                Intent intent = new Intent();
+                intent.putExtra("SELECTED_ADDRESS", selectedAddress);
+                setResult(RESULT_OK, intent);
+                finish();
             } else {
                 Toast.makeText(this, "No has seleccionado ninguna ubicación", Toast.LENGTH_SHORT).show();
             }
@@ -93,46 +104,27 @@ public class SelectAddressActivity extends AppCompatActivity implements OnMapRea
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
-
-        // Opcional: mover la cámara a España, por ejemplo
         LatLng spain = new LatLng(40.416775, -3.703790);
         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(spain, 5f));
 
-        // Al pulsar en el mapa => marcamos
+        // Listener para clics en el mapa
         mMap.setOnMapClickListener(latLng -> {
             selectedLatLng = latLng;
-            mMap.clear();
-            mMap.addMarker(new MarkerOptions().position(latLng).title("Ubicación seleccionada"));
-            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 14f));
+
+            // Obtener dirección a partir de las coordenadas
+            selectedAddress = getAddressFromLatLng(latLng.latitude, latLng.longitude);
+            if (selectedAddress != null) {
+                mMap.clear();
+                mMap.addMarker(new MarkerOptions().position(latLng).title(selectedAddress));
+                mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 14f));
+            } else {
+                Toast.makeText(this, "No se pudo obtener la dirección", Toast.LENGTH_SHORT).show();
+            }
         });
     }
 
     /**
-     * Buscar con Geocoder la dirección escrita por el usuario
-     */
-    private void searchAddress(String query) {
-        Geocoder geocoder = new Geocoder(this, Locale.getDefault());
-        try {
-            List<Address> results = geocoder.getFromLocationName(query, 1);
-            if (results != null && !results.isEmpty()) {
-                Address address = results.get(0);
-                LatLng latLng = new LatLng(address.getLatitude(), address.getLongitude());
-                selectedLatLng = latLng;
-
-                mMap.clear();
-                mMap.addMarker(new MarkerOptions().position(latLng).title(query));
-                mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng, 14f));
-            } else {
-                Toast.makeText(this, "No se encontró resultado para: " + query, Toast.LENGTH_SHORT).show();
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-            Toast.makeText(this, "Error de geocoding: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    /**
-     * Obtener un String formateado a partir de lat/lng con Geocoder
+     * Obtener una dirección legible a partir de lat/lng con Geocoder
      */
     private String getAddressFromLatLng(double lat, double lng) {
         Geocoder geocoder = new Geocoder(this, Locale.getDefault());
@@ -141,14 +133,12 @@ public class SelectAddressActivity extends AppCompatActivity implements OnMapRea
             if (results != null && !results.isEmpty()) {
                 Address address = results.get(0);
 
-                // Un ejemplo simple de formateo
+                // Formatear la dirección
                 StringBuilder sb = new StringBuilder();
                 if (address.getThoroughfare() != null) sb.append(address.getThoroughfare()).append(", ");
                 if (address.getLocality() != null) sb.append(address.getLocality()).append(", ");
                 if (address.getAdminArea() != null) sb.append(address.getAdminArea()).append(", ");
-                if (address.getCountryName() != null) sb.append(address.getCountryName()).append(" ");
-                if (address.getPostalCode() != null) sb.append(address.getPostalCode());
-
+                if (address.getCountryName() != null) sb.append(address.getCountryName());
                 return sb.toString().trim();
             }
         } catch (IOException e) {
