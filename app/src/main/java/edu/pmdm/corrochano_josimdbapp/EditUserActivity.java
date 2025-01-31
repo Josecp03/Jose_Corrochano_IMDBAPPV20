@@ -46,13 +46,13 @@ import edu.pmdm.corrochano_josimdbapp.database.FavoriteDatabaseHelper;
 public class EditUserActivity extends AppCompatActivity {
 
     // Request codes
-    private static final int RC_CAMERA          = 100; // Para el intent de cámara
-    private static final int RC_GALLERY         = 101; // Para el intent de galería
+    private static final int RC_CAMERA          = 100;
+    private static final int RC_GALLERY         = 101;
     private static final int RC_CAMERA_PERMISSION = 200;
-    private static final int RC_SELECT_ADDRESS  = 300; // NUEVO: Para SelectAddressActivity
+    private static final int RC_SELECT_ADDRESS  = 300;
 
     private Uri cameraImageUri;
-    private String externalPhotoUrl = ""; // Nueva variable para almacenar la URL externa
+    private String externalPhotoUrl = "";
 
     // Vistas
     private EditText edtName, edtEmail, edtAddress, edtPhone;
@@ -62,7 +62,7 @@ public class EditUserActivity extends AppCompatActivity {
 
     private FirebaseAuth mAuth;
     private FavoriteDatabaseHelper dbHelper;
-    private KeyStoreManager keystoreManager; // Nueva instancia
+    private KeyStoreManager keystoreManager;
 
     @SuppressLint("MissingInflatedId")
     @Override

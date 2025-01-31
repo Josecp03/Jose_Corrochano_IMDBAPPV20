@@ -19,8 +19,8 @@ public class KeyStoreManager {
     private static final String ANDROID_KEYSTORE = "AndroidKeyStore";
     private static final String KEY_ALIAS = "MyAppKeyAlias";
     private static final String TRANSFORMATION = "AES/GCM/NoPadding";
-    private static final int IV_SIZE = 12; // Tamaño estándar para GCM
-    private static final int TAG_LENGTH = 128; // Tamaño del tag para GCM
+    private static final int IV_SIZE = 12;
+    private static final int TAG_LENGTH = 128;
 
     private SecretKey secretKey;
 
@@ -44,9 +44,6 @@ public class KeyStoreManager {
         }
     }
 
-    /**
-     * Genera una clave AES y la almacena en el Android Keystore.
-     */
     private void generateKey() {
         try {
             KeyGenerator keyGenerator = KeyGenerator.getInstance(
@@ -67,12 +64,6 @@ public class KeyStoreManager {
         }
     }
 
-    /**
-     * Cifra el texto plano y devuelve una cadena Base64 que contiene el IV y el texto cifrado.
-     *
-     * @param plainText Texto plano a cifrar.
-     * @return Texto cifrado en Base64 con IV.
-     */
     public String encrypt(String plainText) {
         try {
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
@@ -94,12 +85,6 @@ public class KeyStoreManager {
         }
     }
 
-    /**
-     * Descifra la cadena Base64 que contiene el IV y el texto cifrado, devolviendo el texto plano.
-     *
-     * @param cipherText Texto cifrado en Base64 con IV.
-     * @return Texto plano descifrado.
-     */
     public String decrypt(String cipherText) {
         try {
             byte[] cipherMessage = Base64.decode(cipherText, Base64.DEFAULT);

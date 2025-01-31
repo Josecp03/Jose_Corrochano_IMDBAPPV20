@@ -1,4 +1,3 @@
-// Archivo: MainActivity.java
 package edu.pmdm.corrochano_josimdbapp;
 
 import android.annotation.SuppressLint;
@@ -53,14 +52,13 @@ public class MainActivity extends AppCompatActivity {
     private TextView textViewEmail;
     private AppCompatImageView imageViewPhoto;
     private Button logoutButton;
-    private KeyStoreManager keystoreManager; // Nueva instancia
+    private KeyStoreManager keystoreManager;
 
     @SuppressLint("WrongViewCast")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Inicializar KeystoreManager
         keystoreManager = new KeyStoreManager();
 
         binding = ActivityMainBinding.inflate(getLayoutInflater());
@@ -97,7 +95,6 @@ public class MainActivity extends AppCompatActivity {
         imageViewPhoto = headerView.findViewById(R.id.imageViewPhoto);
         logoutButton = headerView.findViewById(R.id.buttonLogout);
 
-        // Cargar los datos del usuario
         loadUserData();
 
         // Botón Logout
@@ -108,7 +105,6 @@ public class MainActivity extends AppCompatActivity {
                 String fechaLogout = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date());
                 FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(MainActivity.this);
                 dbHelper.updateLastLogout(uid, fechaLogout);
-                // dbHelper.updatePhotoUrl(uid, ""); // Eliminar o comentar esta línea para mantener la foto de perfil
             }
 
             SharedPreferences preferences = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE);
@@ -132,28 +128,24 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    /**
-     * Método para cargar los datos del usuario desde Firebase y la base de datos local.
-     * Se llama en onCreate() y onResume() para asegurar que los datos estén actualizados.
-     */
     private void loadUserData() {
         FirebaseUser usuario = mAuth.getCurrentUser();
         AccessToken fbAccessToken = AccessToken.getCurrentAccessToken();
         boolean isFacebookLoggedIn = (fbAccessToken != null && !fbAccessToken.isExpired());
 
         if (usuario != null) {
-            // 1) Tomamos el nombre de Firebase (o "Usuario" en su defecto)
+            // Coger el nombre de Firebase
             String nombre = usuario.getDisplayName() != null ? usuario.getDisplayName() : "Usuario";
             String email = (usuario.getEmail() != null) ? usuario.getEmail() : "Sin email";
             Uri fotoUri = usuario.getPhotoUrl();
 
-            // 2) Si está logueado con Facebook, preferimos los datos de Facebook
+            // Comprobar si esta loggeado con Facebook
             if (isFacebookLoggedIn) {
                 Profile profile = Profile.getCurrentProfile();
                 if (profile != null) {
                     String facebookNombre = profile.getFirstName() + " " + profile.getLastName();
                     facebookNombre = facebookNombre.trim().isEmpty() ? "Usuario de Facebook" : facebookNombre;
-                    nombre = facebookNombre; // Sobrescribimos
+                    nombre = facebookNombre;
 
                     email = "Conectado con Facebook";
 
@@ -164,13 +156,13 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            // 3) SOBRESCRIBIR el nombre y foto con el que tengamos en la base local
+            // Coger el nombre y foto con el que tengamos en la base local
             FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(this);
             SQLiteDatabase db = dbHelper.getReadableDatabase();
             Cursor cursor = db.rawQuery(
                     "SELECT " + FavoriteDatabaseHelper.COL_NAME + ", " +
-                            FavoriteDatabaseHelper.COL_PHONE + ", " + // Añadir COL_PHONE
-                            FavoriteDatabaseHelper.COL_ADDRESS + ", " + // Añadir COL_ADDRESS
+                            FavoriteDatabaseHelper.COL_PHONE + ", " +
+                            FavoriteDatabaseHelper.COL_ADDRESS + ", " +
                             FavoriteDatabaseHelper.COL_PHOTO_URL +
                             " FROM " + FavoriteDatabaseHelper.TABLE_USUARIOS +
                             " WHERE " + FavoriteDatabaseHelper.COL_USER_ID + " = ?",
@@ -184,9 +176,8 @@ public class MainActivity extends AppCompatActivity {
                 String encryptedAddress = cursor.getString(2);
                 String localPhotoUrl = cursor.getString(3);
 
-                // Solo si localName no está vacío, lo usamos
                 if (localName != null && !localName.trim().isEmpty()) {
-                    nombre = localName; // La base de datos local "gana"
+                    nombre = localName;
                 }
                 if (localPhotoUrl != null && !localPhotoUrl.trim().isEmpty()) {
                     fotoUri = Uri.parse(localPhotoUrl);
@@ -209,45 +200,35 @@ public class MainActivity extends AppCompatActivity {
             if (fotoUri != null && !fotoUri.toString().isEmpty()) {
                 Glide.with(this)
                         .load(fotoUri)
-                        .diskCacheStrategy(DiskCacheStrategy.NONE) // Evita la caché en disco
-                        .skipMemoryCache(true)                    // Evita la caché en memoria
+                        .diskCacheStrategy(DiskCacheStrategy.NONE)
+                        .skipMemoryCache(true)
                         .circleCrop()
                         .into(imageViewPhoto);
             }
 
         } else {
-            // Usuario nulo => vamos a la pantalla de login
             navegarAlLogin();
         }
     }
 
-    /**
-     * Método llamado cuando la actividad se reanuda.
-     * Se utiliza para recargar los datos del usuario y reflejar cualquier cambio.
-     */
     @Override
     protected void onResume() {
         super.onResume();
         loadUserData();
     }
 
-    /**
-     * Método para navegar a la actividad de login.
-     */
     private void navegarAlLogin(){
         Intent intent = new Intent(MainActivity.this, LogInActivity.class);
         startActivity(intent);
         finish();
     }
 
-    // Menú de opciones
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main, menu);
         return true;
     }
 
-    // Opción Edit User
     @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
         int id = item.getItemId();
@@ -257,7 +238,6 @@ public class MainActivity extends AppCompatActivity {
             FirebaseUser usuario = mAuth.getCurrentUser();
             if (usuario != null) {
                 Uri fotoUri = usuario.getPhotoUrl();
-                // Si usas la de Facebook en caso de FB, reemplázala antes
                 AccessToken fbToken = AccessToken.getCurrentAccessToken();
                 if (fbToken != null && !fbToken.isExpired()) {
                     Profile profile = Profile.getCurrentProfile();
