@@ -62,6 +62,7 @@ public class EditUserActivity extends AppCompatActivity {
 
     private FirebaseAuth mAuth;
     private FavoriteDatabaseHelper dbHelper;
+    private KeyStoreManager keystoreManager; // Nueva instancia
 
     @SuppressLint("MissingInflatedId")
     @Override
@@ -69,6 +70,9 @@ public class EditUserActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_edit_user);
+
+        // Inicializar KeystoreManager
+        keystoreManager = new KeyStoreManager();
 
         // Ajuste de insets
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
@@ -140,9 +144,13 @@ public class EditUserActivity extends AppCompatActivity {
             if (cursor != null && cursor.moveToFirst()) {
                 String name     = cursor.getString(0);
                 String email    = cursor.getString(1);
-                String phone    = cursor.getString(2);
-                String address  = cursor.getString(3);
+                String encryptedPhone    = cursor.getString(2);
+                String encryptedAddress  = cursor.getString(3);
                 String photoUrl = cursor.getString(4);
+
+                // Descifrar teléfono y dirección
+                String phone = keystoreManager.decrypt(encryptedPhone);
+                String address = keystoreManager.decrypt(encryptedAddress);
 
                 edtName.setText(name);
                 edtEmail.setText(email);
@@ -207,6 +215,15 @@ public class EditUserActivity extends AppCompatActivity {
                 photoUrl = externalPhotoUrl;
             }
 
+            // Cifrar teléfono y dirección
+            String encryptedPhone = keystoreManager.encrypt(phoneNumber);
+            String encryptedAddress = keystoreManager.encrypt(newAddress);
+
+            if (encryptedPhone == null || encryptedAddress == null) {
+                Toast.makeText(this, "Error al cifrar los datos. Inténtalo de nuevo.", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
             // Actualizar en la base de datos local
             FirebaseUser user = mAuth.getCurrentUser(); // Renombrado a 'user'
             if (user != null) {
@@ -216,8 +233,8 @@ public class EditUserActivity extends AppCompatActivity {
                         edtEmail.getText().toString().trim(),
                         getCurrentTimestamp(),
                         getCurrentTimestamp(),
-                        phoneNumber,
-                        newAddress,
+                        encryptedPhone,      // Guardar teléfono cifrado
+                        encryptedAddress,    // Guardar dirección cifrada
                         photoUrl
                 );
             }

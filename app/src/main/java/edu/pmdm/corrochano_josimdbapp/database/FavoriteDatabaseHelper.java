@@ -94,8 +94,8 @@ public class FavoriteDatabaseHelper extends SQLiteOpenHelper {
         values.put(COL_EMAIL, email);
         values.put(COL_LAST_LOGIN, lastLogin);
         values.put(COL_LAST_LOGOUT, lastLogout);
-        values.put(COL_PHONE, phone);           // Insertar telefono
-        values.put(COL_ADDRESS, address);       // Insertar direccion
+        values.put(COL_PHONE, phone);           // Insertar telefono cifrado
+        values.put(COL_ADDRESS, address);       // Insertar direccion cifrada
         values.put(COL_PHOTO_URL, photoUrl);    // Insertar foto URL
 
         if (!existe) {

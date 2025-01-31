@@ -53,11 +53,15 @@ public class MainActivity extends AppCompatActivity {
     private TextView textViewEmail;
     private AppCompatImageView imageViewPhoto;
     private Button logoutButton;
+    private KeyStoreManager keystoreManager; // Nueva instancia
 
     @SuppressLint("WrongViewCast")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Inicializar KeystoreManager
+        keystoreManager = new KeyStoreManager();
 
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
@@ -165,14 +169,21 @@ public class MainActivity extends AppCompatActivity {
             SQLiteDatabase db = dbHelper.getReadableDatabase();
             Cursor cursor = db.rawQuery(
                     "SELECT " + FavoriteDatabaseHelper.COL_NAME + ", " +
+                            FavoriteDatabaseHelper.COL_PHONE + ", " + // Añadir COL_PHONE
+                            FavoriteDatabaseHelper.COL_ADDRESS + ", " + // Añadir COL_ADDRESS
                             FavoriteDatabaseHelper.COL_PHOTO_URL +
                             " FROM " + FavoriteDatabaseHelper.TABLE_USUARIOS +
                             " WHERE " + FavoriteDatabaseHelper.COL_USER_ID + " = ?",
                     new String[]{ usuario.getUid() }
             );
+            String decryptedPhone = "";
+            String decryptedAddress = "";
             if (cursor != null && cursor.moveToFirst()) {
                 String localName = cursor.getString(0);
-                String localPhotoUrl = cursor.getString(1);
+                String encryptedPhone = cursor.getString(1);
+                String encryptedAddress = cursor.getString(2);
+                String localPhotoUrl = cursor.getString(3);
+
                 // Solo si localName no está vacío, lo usamos
                 if (localName != null && !localName.trim().isEmpty()) {
                     nombre = localName; // La base de datos local "gana"
@@ -180,6 +191,12 @@ public class MainActivity extends AppCompatActivity {
                 if (localPhotoUrl != null && !localPhotoUrl.trim().isEmpty()) {
                     fotoUri = Uri.parse(localPhotoUrl);
                 }
+
+                // Descifrar teléfono y dirección
+                decryptedPhone = keystoreManager.decrypt(encryptedPhone);
+                decryptedAddress = keystoreManager.decrypt(encryptedAddress);
+
+                // Cerramos el cursor
                 cursor.close();
             }
             db.close();
