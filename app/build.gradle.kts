@@ -51,7 +51,11 @@ dependencies {
     implementation ("com.squareup.retrofit2:retrofit:2.9.0")
     implementation ("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation ("com.google.code.gson:gson:2.8.9");
-    implementation ("com.facebook.android:facebook-login:latest.release");
+    implementation ("com.facebook.android:facebook-login:latest.release")
+    implementation("com.hbb20:ccp:2.5.1")
+    implementation("com.googlecode.libphonenumber:libphonenumber:8.12.50")
+    implementation("com.google.android.gms:play-services-maps:18.1.0")
+    implementation("com.google.android.libraries.places:places:3.2.0")
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
