@@ -123,9 +123,6 @@ public class SelectAddressActivity extends AppCompatActivity implements OnMapRea
         });
     }
 
-    /**
-     * Obtener una dirección legible a partir de lat/lng con Geocoder
-     */
     private String getAddressFromLatLng(double lat, double lng) {
         Geocoder geocoder = new Geocoder(this, Locale.getDefault());
         try {

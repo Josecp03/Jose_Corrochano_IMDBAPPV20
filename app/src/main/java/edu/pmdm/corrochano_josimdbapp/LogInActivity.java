@@ -375,11 +375,7 @@ public class LogInActivity extends AppCompatActivity {
                 });
     }
 
-    /**
-     * Método para insertar un nuevo usuario en la base de datos con los nuevos campos vacíos.
-     */
     private void registrarUsuarioEnBaseDatos(String userId, String name, String email) {
-        Log.d(TAG, "Registering user in local database.");
 
         // Obtener la fecha y hora actual en el formato deseado
         String fechaLogin = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date());
@@ -399,14 +395,9 @@ public class LogInActivity extends AppCompatActivity {
                 ""  // photo_url
         );
 
-        Log.d(TAG, "User registered in local database successfully.");
     }
 
-    /**
-     * Método para iniciar sesión con correo electrónico y contraseña.
-     */
     private void iniciarSesion() {
-        Log.d(TAG, "Starting user login.");
 
         String email = editTextEmail.getText().toString().trim();
         String password = editTextPassword.getText().toString().trim();
@@ -437,19 +428,17 @@ public class LogInActivity extends AppCompatActivity {
         auth.signInWithEmailAndPassword(email, password)
                 .addOnCompleteListener(this, task -> {
                     if (task.isSuccessful()) {
-                        // Inicio de sesión exitoso
-                        Log.d(TAG, "User login successful.");
                         FirebaseUser usuario = auth.getCurrentUser();
                         if (usuario != null) {
                             String uid = usuario.getUid();
                             String nombre = usuario.getDisplayName();
                             if (nombre == null || nombre.isEmpty()) {
-                                nombre = email.split("@")[0]; // Puedes personalizar esto
+                                nombre = email.split("@")[0];
                             }
                             String emailUser = usuario.getEmail();
 
                             // Registrar el last_login en la base de datos
-                            registrarLastLogin(uid, nombre, emailUser, null); // photo_url no se actualiza aquí
+                            registrarLastLogin(uid, nombre, emailUser, null);
 
                             Toast.makeText(LogInActivity.this, "Inicio de sesión exitoso.", Toast.LENGTH_SHORT).show();
 
@@ -457,14 +446,9 @@ public class LogInActivity extends AppCompatActivity {
                             navigateToMainActivity();
                         }
                     } else {
-                        // Manejar errores de inicio de sesión
-                        Log.e(TAG, "User login failed.", task.getException());
 
                         if (task.getException() instanceof FirebaseAuthUserCollisionException) {
                             FirebaseAuthUserCollisionException collisionEx = (FirebaseAuthUserCollisionException) task.getException();
-                            String existingEmail = collisionEx.getEmail();
-                            Log.d(TAG, "Email collision detected: " + existingEmail);
-                            // Puedes manejar colisiones aquí si es necesario
                         }
 
                         Toast.makeText(LogInActivity.this, "Error al iniciar sesión: " + task.getException().getMessage(), Toast.LENGTH_LONG).show();
@@ -472,17 +456,11 @@ public class LogInActivity extends AppCompatActivity {
                 });
     }
 
-    /**
-     * Método para manejar el token de acceso de Facebook.
-     */
     private void handleFacebookAccessToken(AccessToken token) {
-        Log.d(TAG, "Handling Facebook access token.");
 
         AuthCredential credential = FacebookAuthProvider.getCredential(token.getToken());
         auth.signInWithCredential(credential).addOnCompleteListener(this, task -> {
             if (task.isSuccessful()) {
-                // Inicio de sesión exitoso con Facebook
-                Log.d(TAG, "Facebook authentication successful.");
                 FirebaseUser usuario = auth.getCurrentUser();
                 if (usuario != null) {
                     String nombre = usuario.getDisplayName();
@@ -501,14 +479,12 @@ public class LogInActivity extends AppCompatActivity {
                 if (task.getException() instanceof FirebaseAuthUserCollisionException) {
                     FirebaseAuthUserCollisionException collisionEx = (FirebaseAuthUserCollisionException) task.getException();
                     String email = collisionEx.getEmail();
-                    Log.d(TAG, "Email collision detected: " + email);
 
                     // Guardamos credencial de Facebook y ofrecemos vinculación
                     facebookCredential = credential;
                     mostrarDialogoVinculacion(email);
                 } else {
-                    // Otro tipo de error
-                    Log.e(TAG, "Facebook Sign-In Failed", task.getException());
+
                     Toast.makeText(LogInActivity.this, "Error al autenticar con Facebook", Toast.LENGTH_SHORT).show();
                 }
             }
@@ -517,27 +493,23 @@ public class LogInActivity extends AppCompatActivity {
 
 
     private void mostrarDialogoVinculacion(String email) {
-        Log.d(TAG, "Showing account linking dialog for email: " + email);
 
         new AlertDialog.Builder(this)
                 .setTitle("Cuenta ya existente")
                 .setMessage("Ya existe una cuenta con el correo " + email + ". ¿Deseas vincular tu cuenta de Facebook con Google?")
                 .setPositiveButton("Sí", (dialog, which) -> {
                     // Lanzamos el flujo de Google Sign-In para vincular
-                    Log.d(TAG, "User chose to link accounts. Starting Google Sign-In for linking.");
                     Intent linkIntent = googleSignInClient.getSignInIntent();
                     activityResultLauncherLinking.launch(linkIntent);
                 })
                 .setNegativeButton("No", (dialog, which) -> {
                     Toast.makeText(LogInActivity.this, "No se vincularon las cuentas.", Toast.LENGTH_SHORT).show();
-                    Log.d(TAG, "User chose not to link accounts.");
                 })
                 .setCancelable(false)
                 .show();
     }
 
     private void navigateToMainActivity() {
-        Log.d(TAG, "Navigating to MainActivity.");
 
         // Crear el Intent
         Intent intent = new Intent(LogInActivity.this, MainActivity.class);
@@ -549,12 +521,7 @@ public class LogInActivity extends AppCompatActivity {
         finish();
     }
 
-    /**
-     * Método para registrar el last_login y photo_url en la base de datos.
-     * Modificación: Solo actualizar photo_url si no está ya establecido.
-     */
     private void registrarLastLogin(String userId, String name, String email, String photoUrl) {
-        Log.d(TAG, "Registering last login for user ID: " + userId);
 
         // Obtener la fecha y hora actual en el formato deseado
         String fechaLogin = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date());
@@ -590,20 +557,17 @@ public class LogInActivity extends AppCompatActivity {
                     email,
                     fechaLogin,
                     null,
-                    "", // phone
-                    "", // address
+                    "",
+                    "",
                     (photoUrl != null) ? photoUrl : ""
             );
-            Log.d(TAG, "User inserted into local database with default fields.");
         } else {
             // Existe, actualizar last_login
             dbHelper.updateLastLogin(userId, fechaLogin);
-            Log.d(TAG, "User's last_login updated in local database.");
 
             // Opcional: Actualizar photo_url solo si no está establecido previamente
             if (photoUrl != null && !photoUrl.isEmpty() && existingPhotoUrl == null) {
                 dbHelper.updatePhotoUrl(userId, photoUrl);
-                Log.d(TAG, "User's photo_url updated in local database.");
             }
         }
 
@@ -613,18 +577,15 @@ public class LogInActivity extends AppCompatActivity {
         editor.putBoolean("isLoggedIn", true);
         editor.apply();
 
-        Log.d(TAG, "User last login registered successfully.");
     }
 
 
     private void personalizarBotonGoogle(SignInButton button) {
-        Log.d(TAG, "Personalizing Google Sign-In button.");
 
         for (int i = 0; i < button.getChildCount(); i++) {
             View view = button.getChildAt(i);
             if (view instanceof TextView) {
-                ((TextView) view).setText("Iniciar sesión con Google");
-                Log.d(TAG, "Google Sign-In button text set.");
+                ((TextView) view).setText("Sign In With Google");
                 break;
             }
         }
