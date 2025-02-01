@@ -1,4 +1,3 @@
-// Archivo: EditUserActivity.java
 package edu.pmdm.corrochano_josimdbapp;
 
 import android.Manifest;
@@ -9,6 +8,7 @@ import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.text.TextUtils;
@@ -18,10 +18,6 @@ import android.widget.ImageView;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
-import androidx.activity.result.ActivityResult;
-import androidx.activity.result.ActivityResultCallback;
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
@@ -49,22 +45,18 @@ import edu.pmdm.corrochano_josimdbapp.database.FavoriteDatabaseHelper;
 
 public class EditUserActivity extends AppCompatActivity {
 
-    // Request codes
-    private static final int RC_CAMERA          = 100;
-    private static final int RC_GALLERY         = 101;
+    private static final int RC_CAMERA = 100;
+    private static final int RC_GALLERY = 101;
     private static final int RC_CAMERA_PERMISSION = 200;
-    private static final int RC_SELECT_ADDRESS  = 300;
-    private static final int RC_LOCATION_PERMISSION = 400; // Nuevo: Código de solicitud para permisos de ubicación
+    private static final int RC_SELECT_ADDRESS = 300;
+    private static final int RC_STORAGE_PERMISSION = 500;
 
     private Uri cameraImageUri;
     private String externalPhotoUrl = "";
-
-    // Vistas
     private EditText edtName, edtEmail, edtAddress, edtPhone;
     private ImageView userImageView;
     private Button btnDirection, btnImage, btnSave;
     private CountryCodePicker countryCodePicker;
-
     private FirebaseAuth mAuth;
     private FavoriteDatabaseHelper dbHelper;
     private KeyStoreManager keystoreManager;
@@ -79,26 +71,22 @@ public class EditUserActivity extends AppCompatActivity {
         // Inicializar KeystoreManager
         keystoreManager = new KeyStoreManager();
 
-        // Ajuste de insets
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             return insets;
         });
 
-        // Instancias
         mAuth = FirebaseAuth.getInstance();
         dbHelper = new FavoriteDatabaseHelper(this);
-
-        // Referencias UI
-        edtName       = findViewById(R.id.editTextTextName);
-        edtEmail      = findViewById(R.id.editTextTextEmail);
-        edtAddress    = findViewById(R.id.editTextTextAddress);
-        edtPhone      = findViewById(R.id.editTextNumberPhone);
+        edtName = findViewById(R.id.editTextTextName);
+        edtEmail = findViewById(R.id.editTextTextEmail);
+        edtAddress = findViewById(R.id.editTextTextAddress);
+        edtPhone = findViewById(R.id.editTextNumberPhone);
         userImageView = findViewById(R.id.imageView);
-        btnDirection  = findViewById(R.id.buttonSelectDirection);
-        btnImage      = findViewById(R.id.buttonSelectImage);
-        btnSave       = findViewById(R.id.buttonSave);
+        btnDirection = findViewById(R.id.buttonSelectDirection);
+        btnImage = findViewById(R.id.buttonSelectImage);
+        btnSave = findViewById(R.id.buttonSave);
         countryCodePicker = findViewById(R.id.countryCodePicker);
 
         // Restaurar prefijo país
@@ -107,10 +95,9 @@ public class EditUserActivity extends AppCompatActivity {
         if (lastCode != -1) {
             countryCodePicker.setCountryForPhoneCode(lastCode);
         } else {
-            countryCodePicker.setCountryForPhoneCode(
-                    Integer.parseInt(countryCodePicker.getDefaultCountryCode())
-            );
+            countryCodePicker.setCountryForPhoneCode(Integer.parseInt(countryCodePicker.getDefaultCountryCode()));
         }
+
         countryCodePicker.setOnCountryChangeListener(() -> {
             int selectedCode = countryCodePicker.getSelectedCountryCodeAsInt();
             prefs.edit().putInt("LAST_COUNTRY_CODE", selectedCode).apply();
@@ -122,14 +109,14 @@ public class EditUserActivity extends AppCompatActivity {
             Uri photoUri = Uri.parse(photoUriString);
             Glide.with(this)
                     .load(photoUri)
-                    .diskCacheStrategy(DiskCacheStrategy.NONE) // Evita la caché en disco
-                    .skipMemoryCache(true)                    // Evita la caché en memoria
+                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                    .skipMemoryCache(true)
                     .circleCrop()
                     .into(userImageView);
             if (photoUriString.startsWith("http")) {
-                externalPhotoUrl = photoUriString; // Asignar la URL externa
+                externalPhotoUrl = photoUriString;
             } else {
-                cameraImageUri = photoUri; // Asignar la URI local
+                cameraImageUri = photoUri;
             }
         }
 
@@ -147,10 +134,10 @@ public class EditUserActivity extends AppCompatActivity {
             );
 
             if (cursor != null && cursor.moveToFirst()) {
-                String name     = cursor.getString(0);
-                String email    = cursor.getString(1);
-                String encryptedPhone    = cursor.getString(2);
-                String encryptedAddress  = cursor.getString(3);
+                String name = cursor.getString(0);
+                String email = cursor.getString(1);
+                String encryptedPhone = cursor.getString(2);
+                String encryptedAddress = cursor.getString(3);
                 String photoUrl = cursor.getString(4);
 
                 // Descifrar teléfono y dirección
@@ -161,6 +148,7 @@ public class EditUserActivity extends AppCompatActivity {
                 edtEmail.setText(email);
                 edtPhone.setText(phone);
                 edtAddress.setText(address);
+
                 // Bloquear el email (solo lectura)
                 edtEmail.setKeyListener(null);
                 edtEmail.setFocusable(false);
@@ -169,9 +157,9 @@ public class EditUserActivity extends AppCompatActivity {
                 if (photoUrl != null && !photoUrl.isEmpty()) {
                     loadImageIntoView(Uri.parse(photoUrl));
                     if (photoUrl.startsWith("http")) {
-                        externalPhotoUrl = photoUrl; // Asignar la URL externa
+                        externalPhotoUrl = photoUrl;
                     } else {
-                        cameraImageUri = Uri.parse(photoUrl); // Asignar la URI local
+                        cameraImageUri = Uri.parse(photoUrl);
                     }
                 }
 
@@ -180,31 +168,16 @@ public class EditUserActivity extends AppCompatActivity {
             db.close();
         }
 
-        // Botón para abrir la actividad de Seleccionar Dirección
-        btnDirection.setOnClickListener(v -> {
-            // Verificar permisos de ubicación
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-                    != PackageManager.PERMISSION_GRANTED ||
-                    ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION)
-                            != PackageManager.PERMISSION_GRANTED) {
+        // Botón para abrir la actividad de Seleccionar Dirección (sin verificación de permisos de ubicación)
+        btnDirection.setOnClickListener(v -> abrirSelectAddressActivity());
 
-                // Solicitar permisos
-                requestPermissions(
-                        new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION},
-                        RC_LOCATION_PERMISSION
-                );
-            } else {
-                // Permisos ya concedidos, abrir la actividad
-                abrirSelectAddressActivity();
-            }
-        });
-
-        // Botón para seleccionar imagen (cámara, galería, URL)
+        // Botón para seleccionar imagen (cámara, galería, URL externa)
         btnImage.setOnClickListener(v -> showImageOptionsDialog());
 
         // Botón Guardar
         btnSave.setOnClickListener(v -> {
-            // Validar phone
+
+            // Validar teléfono
             String phoneNumber = edtPhone.getText().toString().trim();
             String countryCode = countryCodePicker.getSelectedCountryCode();
             String selectedCountryNameCode = countryCodePicker.getSelectedCountryNameCode();
@@ -225,7 +198,7 @@ public class EditUserActivity extends AppCompatActivity {
             // Obtener otros campos
             String newAddress = edtAddress.getText().toString().trim();
 
-            // Obtener foto URL (puede ser una URI local o una URL externa)
+            // Obtener foto URL
             String photoUrl = "";
             if (cameraImageUri != null) {
                 photoUrl = cameraImageUri.toString();
@@ -251,8 +224,8 @@ public class EditUserActivity extends AppCompatActivity {
                         edtEmail.getText().toString().trim(),
                         getCurrentTimestamp(),
                         getCurrentTimestamp(),
-                        encryptedPhone,      // Guardar teléfono cifrado
-                        encryptedAddress,    // Guardar dirección cifrada
+                        encryptedPhone,
+                        encryptedAddress,
                         photoUrl
                 );
             }
@@ -262,20 +235,15 @@ public class EditUserActivity extends AppCompatActivity {
             // Volver a MainActivity
             startActivity(new Intent(this, MainActivity.class));
             finish();
+
         });
     }
 
-    /**
-     * Método para abrir la actividad SelectAddressActivity
-     */
     private void abrirSelectAddressActivity() {
         Intent intent = new Intent(this, SelectAddressActivity.class);
         startActivityForResult(intent, RC_SELECT_ADDRESS);
     }
 
-    //────────────────────────────────────────────────────────────────────────
-    // IMAGEN: CÁMARA, GALERÍA, URL
-    //────────────────────────────────────────────────────────────────────────
     private void showImageOptionsDialog() {
         String[] items = {"Cámara", "Galería", "URL externa"};
 
@@ -283,13 +251,13 @@ public class EditUserActivity extends AppCompatActivity {
                 .setTitle("Seleccionar imagen")
                 .setItems(items, (dialog, which) -> {
                     switch (which) {
-                        case 0: // cámara
+                        case 0:
                             openCamera();
                             break;
-                        case 1: // galería
+                        case 1:
                             openGallery();
                             break;
-                        case 2: // url
+                        case 2:
                             showUrlDialog();
                             break;
                     }
@@ -298,19 +266,10 @@ public class EditUserActivity extends AppCompatActivity {
                 .show();
     }
 
-    /**
-     * Verifica si tenemos permiso de cámara
-     * Si no -> lo pide
-     * Si sí -> abre la cámara
-     */
     private void openCamera() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 != PackageManager.PERMISSION_GRANTED) {
-
-            requestPermissions(
-                    new String[]{Manifest.permission.CAMERA},
-                    RC_CAMERA_PERMISSION
-            );
+            requestPermissions(new String[]{Manifest.permission.CAMERA}, RC_CAMERA_PERMISSION);
         } else {
             launchCameraIntent();
         }
@@ -346,9 +305,26 @@ public class EditUserActivity extends AppCompatActivity {
     }
 
     private void openGallery() {
-        Intent galleryIntent = new Intent(Intent.ACTION_PICK);
-        galleryIntent.setType("image/*");
-        startActivityForResult(galleryIntent, RC_GALLERY);
+        // Para Android 13 (API 33 o superior) se usa READ_MEDIA_IMAGES
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_MEDIA_IMAGES)
+                    != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.READ_MEDIA_IMAGES}, RC_STORAGE_PERMISSION);
+            } else {
+                Intent galleryIntent = new Intent(Intent.ACTION_PICK);
+                galleryIntent.setType("image/*");
+                startActivityForResult(galleryIntent, RC_GALLERY);
+            }
+        } else {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                    != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, RC_STORAGE_PERMISSION);
+            } else {
+                Intent galleryIntent = new Intent(Intent.ACTION_PICK);
+                galleryIntent.setType("image/*");
+                startActivityForResult(galleryIntent, RC_GALLERY);
+            }
+        }
     }
 
     private void showUrlDialog() {
@@ -361,7 +337,7 @@ public class EditUserActivity extends AppCompatActivity {
                 .setPositiveButton("OK", (dialog, which) -> {
                     String url = input.getText().toString().trim();
                     if (!url.isEmpty()) {
-                        externalPhotoUrl = url; // Almacenar la URL externa
+                        externalPhotoUrl = url;
                         loadImageIntoView(Uri.parse(url));
                     } else {
                         Toast.makeText(this, "URL vacía", Toast.LENGTH_SHORT).show();
@@ -371,9 +347,6 @@ public class EditUserActivity extends AppCompatActivity {
                 .show();
     }
 
-    //────────────────────────────────────────────────────────────────────────
-    // onActivityResult para fotos, galería y SELECT_ADDRESS
-    //────────────────────────────────────────────────────────────────────────
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -392,7 +365,7 @@ public class EditUserActivity extends AppCompatActivity {
         if (requestCode == RC_CAMERA && resultCode == RESULT_OK) {
             if (cameraImageUri != null) {
                 loadImageIntoView(cameraImageUri);
-                externalPhotoUrl = ""; // Limpiar la URL externa si se tomó una foto con cámara
+                externalPhotoUrl = "";
             }
         }
 
@@ -401,14 +374,11 @@ public class EditUserActivity extends AppCompatActivity {
             if (data != null && data.getData() != null) {
                 Uri galleryUri = data.getData();
                 loadImageIntoView(galleryUri);
-                externalPhotoUrl = ""; // Limpiar la URL externa si se seleccionó una imagen de la galería
+                externalPhotoUrl = "";
             }
         }
     }
 
-    /**
-     * Maneja la respuesta del usuario al pedir permisos
-     */
     @Override
     public void onRequestPermissionsResult(int requestCode,
                                            @NonNull String[] permissions,
@@ -423,38 +393,28 @@ public class EditUserActivity extends AppCompatActivity {
             }
         }
 
-        if (requestCode == RC_LOCATION_PERMISSION) {
-            if (grantResults.length > 0
-                    && grantResults[0] == PackageManager.PERMISSION_GRANTED
-                    && grantResults[1] == PackageManager.PERMISSION_GRANTED) {
-                // Permisos concedidos, abrir la actividad
-                abrirSelectAddressActivity();
+        if (requestCode == RC_STORAGE_PERMISSION) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                openGallery();
             } else {
-                Toast.makeText(this, "Permisos de ubicación necesarios para seleccionar dirección", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "Permiso de acceso a archivos no concedido", Toast.LENGTH_SHORT).show();
             }
         }
     }
 
-    /**
-     * Cargar la imagen en el ImageView con Glide
-     */
     private void loadImageIntoView(Uri uri) {
         Glide.with(this)
                 .load(uri)
-                .diskCacheStrategy(DiskCacheStrategy.NONE) // Evita la caché en disco
-                .skipMemoryCache(true)                    // Evita la caché en memoria
+                .diskCacheStrategy(DiskCacheStrategy.NONE)
+                .skipMemoryCache(true)
                 .circleCrop()
                 .into(userImageView);
     }
 
-    /**
-     * Valida el número de teléfono según el país seleccionado
-     */
     private boolean isValidPhoneNumber(String fullPhone, String selectedCountryCode) {
         if (TextUtils.isEmpty(fullPhone) || TextUtils.isEmpty(selectedCountryCode)) {
             return false;
         }
-
         PhoneNumberUtil phoneNumberUtil = PhoneNumberUtil.getInstance();
         try {
             Phonenumber.PhoneNumber phoneNumber = phoneNumberUtil.parse(fullPhone, selectedCountryCode);
@@ -465,9 +425,6 @@ public class EditUserActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * Obtener el timestamp actual
-     */
     private String getCurrentTimestamp() {
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
         return sdf.format(new Date());

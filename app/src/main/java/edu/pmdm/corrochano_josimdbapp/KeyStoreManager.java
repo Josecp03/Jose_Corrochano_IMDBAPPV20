@@ -1,4 +1,3 @@
-// Archivo: KeystoreManager.java
 package edu.pmdm.corrochano_josimdbapp;
 
 import android.security.keystore.KeyGenParameterSpec;

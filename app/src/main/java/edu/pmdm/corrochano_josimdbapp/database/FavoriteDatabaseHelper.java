@@ -1,4 +1,3 @@
-// Archivo: FavoriteDatabaseHelper.java
 package edu.pmdm.corrochano_josimdbapp.database;
 
 import android.content.ContentValues;

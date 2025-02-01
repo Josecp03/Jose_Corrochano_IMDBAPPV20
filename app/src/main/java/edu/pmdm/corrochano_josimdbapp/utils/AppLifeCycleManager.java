@@ -1,4 +1,3 @@
-// Archivo: AppLifeCycleManager.java
 package edu.pmdm.corrochano_josimdbapp.utils;
 
 import android.app.Activity;
@@ -25,11 +24,8 @@ public class AppLifeCycleManager implements Application.ActivityLifecycleCallbac
     private boolean isInBackground = false;
     private int activityReferences = 0;
     private boolean isActivityChangingConfigurations = false;
-    private boolean isAppClosed = false;
-
     private Handler logoutHandler = new Handler();
     private Runnable logoutRunnable = this::performLogout;
-
     private Context context;
 
     public AppLifeCycleManager(Context context) {
@@ -45,7 +41,6 @@ public class AppLifeCycleManager implements Application.ActivityLifecycleCallbac
         if (!isActivityChangingConfigurations) {
             activityReferences++;
             if (activityReferences == 1 && isInBackground) {
-                // La aplicación vuelve a primer plano
                 isInBackground = false;
                 logoutHandler.removeCallbacks(logoutRunnable);
             }
@@ -65,9 +60,8 @@ public class AppLifeCycleManager implements Application.ActivityLifecycleCallbac
         if (!isActivityChangingConfigurations) {
             activityReferences--;
             if (activityReferences == 0) {
-                // La aplicación ha pasado a segundo plano
                 isInBackground = true;
-                performLogout(); // Registrar logout sin cerrar sesión
+                performLogout();
             }
         }
     }
@@ -84,9 +78,8 @@ public class AppLifeCycleManager implements Application.ActivityLifecycleCallbac
     @Override
     public void onTrimMemory(int level) {
         if (level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
-            // La aplicación ha pasado a segundo plano
             isInBackground = true;
-            performLogout(); // Registrar logout sin cerrar sesión
+            performLogout();
         }
     }
 
@@ -94,11 +87,11 @@ public class AppLifeCycleManager implements Application.ActivityLifecycleCallbac
         FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
         if (currentUser != null) {
             registerUserLogout(currentUser);
-            Log.d("AppLifecycleManager", "Logout registrado automáticamente al pasar a segundo plano.");
         }
     }
 
     private void registerUserLogout(FirebaseUser user) {
+
         // Crear la fecha de logout
         String fechaLogout = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date());
 
@@ -106,22 +99,21 @@ public class AppLifeCycleManager implements Application.ActivityLifecycleCallbac
         FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(context);
         dbHelper.updateLastLogout(user.getUid(), fechaLogout);
 
-        Log.d("AppLifecycleManager", "Logout registrado para el usuario: " + user.getUid());
     }
 
 
     public void checkForPendingLogout() {
+
         SharedPreferences preferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         boolean wasLoggedIn = preferences.getBoolean(PREF_IS_LOGGED_IN, false);
 
         if (wasLoggedIn) {
-            // Solo registrar el logout sin cerrar sesión
+
             FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
             if (currentUser != null) {
                 registerUserLogout(currentUser);
             }
 
-            Log.d("AppLifecycleManager", "Logout pendiente registrado al reiniciar la app.");
         }
     }
 
