@@ -8,9 +8,6 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
 import android.os.Bundle;
-import android.view.Menu;
-import android.view.MenuItem;
-import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 
@@ -35,12 +32,13 @@ import com.google.android.material.navigation.NavigationView;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 
-import edu.pmdm.corrochano_josimdbapp.database.FavoriteDatabaseHelper;
-import edu.pmdm.corrochano_josimdbapp.databinding.ActivityMainBinding;
-
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+
+import edu.pmdm.corrochano_josimdbapp.database.FavoriteDatabaseHelper;
+import edu.pmdm.corrochano_josimdbapp.databinding.ActivityMainBinding;
+import edu.pmdm.corrochano_josimdbapp.sync.FavoritesSync;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -89,19 +87,24 @@ public class MainActivity extends AppCompatActivity {
         googleSignInClient = GoogleSignIn.getClient(this, options);
 
         // Header del NavigationView
-        View headerView = navigationView.getHeaderView(0);
-        textViewNombre = headerView.findViewById(R.id.textViewNombre);
-        textViewEmail = headerView.findViewById(R.id.textViewEmail);
-        imageViewPhoto = headerView.findViewById(R.id.imageViewPhoto);
-        logoutButton = headerView.findViewById(R.id.buttonLogout);
+        textViewNombre = binding.navView.getHeaderView(0).findViewById(R.id.textViewNombre);
+        textViewEmail = binding.navView.getHeaderView(0).findViewById(R.id.textViewEmail);
+        imageViewPhoto = binding.navView.getHeaderView(0).findViewById(R.id.imageViewPhoto);
+        logoutButton = binding.navView.getHeaderView(0).findViewById(R.id.buttonLogout);
 
         loadUserData();
 
+        // Una vez cargados los datos del usuario, se sincronizan los favoritos con Firebase
+        FirebaseUser usuario = mAuth.getCurrentUser();
+        if (usuario != null) {
+            FavoritesSync.syncFavorites(MainActivity.this, usuario.getUid());
+        }
+
         // Botón Logout
         logoutButton.setOnClickListener(v -> {
-            FirebaseUser usuario = mAuth.getCurrentUser();
-            if (usuario != null) {
-                String uid = usuario.getUid();
+            FirebaseUser usuarioFB = mAuth.getCurrentUser();
+            if (usuarioFB != null) {
+                String uid = usuarioFB.getUid();
                 String fechaLogout = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date());
                 FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(MainActivity.this);
                 dbHelper.updateLastLogout(uid, fechaLogout);
@@ -116,7 +119,6 @@ public class MainActivity extends AppCompatActivity {
             googleSignInClient.signOut().addOnCompleteListener(this, task -> {
                 LoginManager.getInstance().logOut();
 
-                // Limpiar los datos del NavigationView Header
                 textViewNombre.setText("");
                 textViewEmail.setText("");
 
@@ -134,21 +136,17 @@ public class MainActivity extends AppCompatActivity {
         boolean isFacebookLoggedIn = (fbAccessToken != null && !fbAccessToken.isExpired());
 
         if (usuario != null) {
-            // Coger el nombre de Firebase
             String nombre = usuario.getDisplayName() != null ? usuario.getDisplayName() : "Usuario";
             String email = (usuario.getEmail() != null) ? usuario.getEmail() : "Sin email";
             Uri fotoUri = usuario.getPhotoUrl();
 
-            // Comprobar si esta loggeado con Facebook
             if (isFacebookLoggedIn) {
                 Profile profile = Profile.getCurrentProfile();
                 if (profile != null) {
                     String facebookNombre = profile.getFirstName() + " " + profile.getLastName();
                     facebookNombre = facebookNombre.trim().isEmpty() ? "Usuario de Facebook" : facebookNombre;
                     nombre = facebookNombre;
-
                     email = "Conectado con Facebook";
-
                     Uri facebookFoto = profile.getProfilePictureUri(300, 300);
                     if (facebookFoto != null) {
                         fotoUri = facebookFoto;
@@ -156,7 +154,6 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            // Coger el nombre y foto con el que tengamos en la base local
             FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(this);
             SQLiteDatabase db = dbHelper.getReadableDatabase();
             Cursor cursor = db.rawQuery(
@@ -182,21 +179,15 @@ public class MainActivity extends AppCompatActivity {
                 if (localPhotoUrl != null && !localPhotoUrl.trim().isEmpty()) {
                     fotoUri = Uri.parse(localPhotoUrl);
                 }
-
-                // Descifrar teléfono y dirección
                 decryptedPhone = keystoreManager.decrypt(encryptedPhone);
                 decryptedAddress = keystoreManager.decrypt(encryptedAddress);
-
-                // Cerramos el cursor
                 cursor.close();
             }
             db.close();
 
-            // Mostrar los datos en el NavigationView Header
             textViewNombre.setText(nombre);
             textViewEmail.setText(email);
 
-            // Cargar la imagen de perfil usando Glide, evitando la caché para actualizar la foto
             if (fotoUri != null && !fotoUri.toString().isEmpty()) {
                 Glide.with(this)
                         .load(fotoUri)
@@ -224,17 +215,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
+    public boolean onCreateOptionsMenu(android.view.Menu menu) {
         getMenuInflater().inflate(R.menu.main, menu);
         return true;
     }
 
     @Override
-    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+    public boolean onOptionsItemSelected(@NonNull android.view.MenuItem item) {
         int id = item.getItemId();
         if (id == R.id.action_edit_user) {
             Intent intent = new Intent(MainActivity.this, EditUserActivity.class);
-
             FirebaseUser usuario = mAuth.getCurrentUser();
             if (usuario != null) {
                 Uri fotoUri = usuario.getPhotoUrl();
@@ -245,8 +235,6 @@ public class MainActivity extends AppCompatActivity {
                         fotoUri = profile.getProfilePictureUri(300, 300);
                     }
                 }
-
-                // Pasar la foto como String
                 if (fotoUri != null) {
                     intent.putExtra("EXTRA_PROFILE_PICTURE_URI", fotoUri.toString());
                 }
