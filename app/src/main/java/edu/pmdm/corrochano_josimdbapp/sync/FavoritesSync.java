@@ -15,7 +15,6 @@ import com.google.firebase.firestore.QueryDocumentSnapshot;
 import com.google.firebase.firestore.QuerySnapshot;
 
 import edu.pmdm.corrochano_josimdbapp.database.FavoriteDatabaseHelper;
-import edu.pmdm.corrochano_josimdbapp.models.Favorite;
 
 public class FavoritesSync {
 
@@ -24,7 +23,8 @@ public class FavoritesSync {
 
     /**
      * Sincroniza los favoritos de Firestore con la base de datos local.
-     * Consulta la subcolección "movies" dentro del documento del usuario.
+     * Antes de insertar los favoritos obtenidos desde Firebase, elimina todos los favoritos locales
+     * del usuario para evitar registros obsoletos.
      */
     public static void syncFavorites(final Context context, final String idUsuario) {
         FirebaseFirestore dbCloud = FirebaseFirestore.getInstance();
@@ -37,22 +37,27 @@ public class FavoritesSync {
                 .addOnSuccessListener(new OnSuccessListener<QuerySnapshot>() {
                     @Override
                     public void onSuccess(QuerySnapshot queryDocumentSnapshots) {
+                        // Abrir la base de datos en modo escritura
+                        SQLiteDatabase dbWrite = dbHelper.getWritableDatabase();
+
+                        // Eliminar todos los favoritos locales del usuario
+                        dbWrite.delete(FavoriteDatabaseHelper.TABLE_FAVORITOS, "idUsuario=?", new String[]{idUsuario});
+
+                        // Recorrer los documentos obtenidos de Firebase e insertarlos localmente
                         for (QueryDocumentSnapshot document : queryDocumentSnapshots) {
-                            // Se obtiene cada favorito de la nube
                             String idPelicula = document.getString("idPelicula");
                             String nombrePelicula = document.getString("nombrePelicula");
                             String portadaURL = document.getString("portadaURL");
 
-                            // Insertar en la base local con conflicto ignorado si ya existe
-                            SQLiteDatabase dbWrite = dbHelper.getWritableDatabase();
                             ContentValues values = new ContentValues();
                             values.put("idPelicula", idPelicula);
                             values.put("idUsuario", idUsuario);
                             values.put("nombrePelicula", nombrePelicula);
                             values.put("portadaURL", portadaURL);
-                            dbWrite.insertWithOnConflict(FavoriteDatabaseHelper.TABLE_FAVORITOS, null, values, SQLiteDatabase.CONFLICT_IGNORE);
-                            dbWrite.close();
+
+                            dbWrite.insert(FavoriteDatabaseHelper.TABLE_FAVORITOS, null, values);
                         }
+                        dbWrite.close();
                         Log.d("FavoritesSync", "Sincronización completada.");
                     }
                 })
@@ -65,35 +70,21 @@ public class FavoritesSync {
                 });
     }
 
-    /**
-     * Añade un favorito a Firestore usando la ruta anidada.
-     */
-    public static void addFavorite(final Context context, Favorite favorite) {
+    // Los métodos addFavorite y removeFavorite se mantienen sin cambios
+    public static void addFavorite(final Context context, edu.pmdm.corrochano_josimdbapp.models.Favorite favorite) {
         FirebaseFirestore dbCloud = FirebaseFirestore.getInstance();
-        // Se guarda en: /favorites/{idUsuario}/movies/{idPelicula}
         dbCloud.collection(COLLECTION_ROOT)
                 .document(favorite.getIdUsuario())
                 .collection("movies")
                 .document(favorite.getIdPelicula())
                 .set(favorite)
-                .addOnSuccessListener(new OnSuccessListener<Void>() {
-                    @Override
-                    public void onSuccess(Void aVoid) {
-                        Log.d("FavoritesSync", "Favorito añadido a Firestore.");
-                    }
-                })
-                .addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        Toast.makeText(context, "Error al añadir favorito a la nube: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                        Log.e("FavoritesSync", "Error al añadir favorito: ", e);
-                    }
+                .addOnSuccessListener(aVoid -> Log.d("FavoritesSync", "Favorito añadido a Firestore."))
+                .addOnFailureListener(e -> {
+                    Toast.makeText(context, "Error al añadir favorito a la nube: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    Log.e("FavoritesSync", "Error al añadir favorito: ", e);
                 });
     }
 
-    /**
-     * Elimina un favorito de Firestore usando la ruta anidada.
-     */
     public static void removeFavorite(final Context context, String idUsuario, String idPelicula) {
         FirebaseFirestore dbCloud = FirebaseFirestore.getInstance();
         dbCloud.collection(COLLECTION_ROOT)
@@ -101,18 +92,10 @@ public class FavoritesSync {
                 .collection("movies")
                 .document(idPelicula)
                 .delete()
-                .addOnSuccessListener(new OnSuccessListener<Void>() {
-                    @Override
-                    public void onSuccess(Void aVoid) {
-                        Log.d("FavoritesSync", "Favorito eliminado de Firestore.");
-                    }
-                })
-                .addOnFailureListener(new OnFailureListener() {
-                    @Override
-                    public void onFailure(@NonNull Exception e) {
-                        Toast.makeText(context, "Error al eliminar favorito de la nube: " + e.getMessage(), Toast.LENGTH_SHORT).show();
-                        Log.e("FavoritesSync", "Error al eliminar favorito: ", e);
-                    }
+                .addOnSuccessListener(aVoid -> Log.d("FavoritesSync", "Favorito eliminado de Firestore."))
+                .addOnFailureListener(e -> {
+                    Toast.makeText(context, "Error al eliminar favorito de la nube: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    Log.e("FavoritesSync", "Error al eliminar favorito: ", e);
                 });
     }
 }
