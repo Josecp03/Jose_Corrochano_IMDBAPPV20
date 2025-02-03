@@ -1,4 +1,3 @@
-// Archivo: MyApplication.java
 package edu.pmdm.corrochano_josimdbapp;
 
 import android.app.Application;
