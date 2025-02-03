@@ -22,7 +22,7 @@ import edu.pmdm.corrochano_josimdbapp.IMDBApiClient;
 import edu.pmdm.corrochano_josimdbapp.api.IMDBApiService;
 import edu.pmdm.corrochano_josimdbapp.adapters.MovieAdapter;
 import edu.pmdm.corrochano_josimdbapp.databinding.FragmentTop10Binding;
-import edu.pmdm.corrochano_josimdbapp.database.FavoriteDatabaseHelper;
+import edu.pmdm.corrochano_josimdbapp.database.DatabaseHelper;
 import edu.pmdm.corrochano_josimdbapp.models.Movie;
 import edu.pmdm.corrochano_josimdbapp.models.PopularMoviesResponse;
 import okhttp3.OkHttpClient;
@@ -41,7 +41,7 @@ public class Top10Fragment extends Fragment {
     private List<Movie> movieList = new ArrayList<>();
     private MovieAdapter adapter;
     private RecyclerView re;
-    private FavoriteDatabaseHelper databaseHelper;
+    private DatabaseHelper databaseHelper;
 
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater,
@@ -54,7 +54,7 @@ public class Top10Fragment extends Fragment {
         // Inicialización de la base de datos y demás componentes
         binding = FragmentTop10Binding.inflate(inflater, container, false);
         View root = binding.getRoot();
-        databaseHelper = new FavoriteDatabaseHelper(getContext());
+        databaseHelper = new DatabaseHelper(getContext());
 
         // Configurar RecyclerView
         re = binding.recycler;

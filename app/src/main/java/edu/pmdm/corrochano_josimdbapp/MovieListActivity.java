@@ -2,7 +2,6 @@ package edu.pmdm.corrochano_josimdbapp;
 
 import android.content.Intent;
 import android.os.Bundle;
-import android.util.Log;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
@@ -23,7 +22,7 @@ import java.util.List;
 
 import edu.pmdm.corrochano_josimdbapp.adapters.MovieAdapter;
 import edu.pmdm.corrochano_josimdbapp.api.TMDbApiService;
-import edu.pmdm.corrochano_josimdbapp.database.FavoriteDatabaseHelper;
+import edu.pmdm.corrochano_josimdbapp.database.DatabaseHelper;
 import edu.pmdm.corrochano_josimdbapp.models.Movie;
 import edu.pmdm.corrochano_josimdbapp.models.MovieSearchResponse;
 import edu.pmdm.corrochano_josimdbapp.models.TMDBMovie;
@@ -40,7 +39,7 @@ public class MovieListActivity extends AppCompatActivity {
     private RecyclerView recyclerView;
     private List<Movie> movieList = new ArrayList<>();
     private MovieAdapter adapter;
-    private FavoriteDatabaseHelper databaseHelper;
+    private DatabaseHelper databaseHelper;
     private static final String TMDB_API_KEY = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiJmMDE2ZGRjOGRhYWZmYzUyYmM1MmUxN2I1MTQ2ZTk3MSIsIm5iZiI6MTczNjUzOTU1MC43NjksInN1YiI6IjY3ODE3ZDllYzVkMmU5NmUyNjdiNGMwZiIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.cP-LiqfqCtg1E7xRX6nPOT3cdttykNkk95N3dvGxkbA"; // Reemplaza con tu clave API segura
 
     @Override
@@ -58,7 +57,7 @@ public class MovieListActivity extends AppCompatActivity {
         recyclerView = findViewById(R.id.recyclerView);
 
         // Inicializar la base de datos
-        databaseHelper = new FavoriteDatabaseHelper(this);
+        databaseHelper = new DatabaseHelper(this);
 
         // Configurar RecyclerView
         recyclerView.setLayoutManager(new GridLayoutManager(this, 2)); // 2 columnas

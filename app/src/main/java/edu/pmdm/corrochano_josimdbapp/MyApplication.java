@@ -19,5 +19,6 @@ public class MyApplication extends Application {
 
         // Verificar si hay un logout pendiente
         appLifeCycleManager.checkForPendingLogout();
+
     }
 }

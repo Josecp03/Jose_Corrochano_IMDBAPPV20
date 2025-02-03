@@ -1,12 +1,14 @@
 package edu.pmdm.corrochano_josimdbapp.models;
 
 public class Favorite {
+
+    // Atributos
     private String idPelicula;
     private String idUsuario;
     private String nombrePelicula;
     private String portadaURL;
 
-    // Constructor vacío necesario para Firestore
+    // Constructores
     public Favorite() {
     }
 
@@ -49,4 +51,5 @@ public class Favorite {
     public void setPortadaURL(String portadaURL) {
         this.portadaURL = portadaURL;
     }
+
 }
