@@ -9,7 +9,7 @@ import androidx.annotation.Nullable;
 
 public class FavoriteDatabaseHelper extends SQLiteOpenHelper {
 
-    private static final int DATABASE_VERSION = 11;
+    private static final int DATABASE_VERSION = 13;
     private static final String DATABASE_NOMBRE = "peliculas.db";
     public static final String TABLE_FAVORITOS = "t_favoritos";
     public static final String TABLE_USUARIOS = "t_usuarios";
@@ -48,17 +48,52 @@ public class FavoriteDatabaseHelper extends SQLiteOpenHelper {
                 ")");
     }
 
+
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        // Verificar si se debe realizar la migración en la versión actual
+        if (oldVersion < 13) {  // Supongamos que la nueva versión es 13 sin photo_base64
+            // 1. Crear una tabla temporal sin la columna photo_base64
+            db.execSQL("CREATE TABLE t_usuarios_temp (" +
+                    COL_USER_ID + " TEXT PRIMARY KEY," +
+                    COL_NAME + " TEXT," +
+                    COL_EMAIL + " TEXT," +
+                    COL_LAST_LOGIN + " TEXT," +
+                    COL_LAST_LOGOUT + " TEXT," +
+                    COL_PHONE + " TEXT," +
+                    COL_ADDRESS + " TEXT," +
+                    COL_PHOTO_URL + " TEXT" +
+                    ")");
 
-        if (oldVersion < 11) {
-            db.execSQL("ALTER TABLE " + TABLE_USUARIOS + " ADD COLUMN " + COL_PHONE + " TEXT");
-            db.execSQL("ALTER TABLE " + TABLE_USUARIOS + " ADD COLUMN " + COL_ADDRESS + " TEXT");
-            db.execSQL("ALTER TABLE " + TABLE_USUARIOS + " ADD COLUMN " + COL_PHOTO_URL + " TEXT");
+            // 2. Copiar los datos de la tabla antigua a la temporal
+            db.execSQL("INSERT INTO t_usuarios_temp (" +
+                    COL_USER_ID + ", " +
+                    COL_NAME + ", " +
+                    COL_EMAIL + ", " +
+                    COL_LAST_LOGIN + ", " +
+                    COL_LAST_LOGOUT + ", " +
+                    COL_PHONE + ", " +
+                    COL_ADDRESS + ", " +
+                    COL_PHOTO_URL +
+                    ") SELECT " +
+                    COL_USER_ID + ", " +
+                    COL_NAME + ", " +
+                    COL_EMAIL + ", " +
+                    COL_LAST_LOGIN + ", " +
+                    COL_LAST_LOGOUT + ", " +
+                    COL_PHONE + ", " +
+                    COL_ADDRESS + ", " +
+                    COL_PHOTO_URL +
+                    " FROM " + TABLE_USUARIOS);
+
+            // 3. Eliminar la tabla antigua
+            db.execSQL("DROP TABLE " + TABLE_USUARIOS);
+
+            // 4. Renombrar la tabla temporal a la original
+            db.execSQL("ALTER TABLE t_usuarios_temp RENAME TO " + TABLE_USUARIOS);
         }
-
-
     }
+
 
     public long insertarFavorito(SQLiteDatabase db,
                                  String idUsuario,
@@ -104,6 +139,8 @@ public class FavoriteDatabaseHelper extends SQLiteOpenHelper {
 
         db.close();
     }
+
+
 
     public void updateLastLogin(String userId, String lastLogin) {
         SQLiteDatabase db = getWritableDatabase();
