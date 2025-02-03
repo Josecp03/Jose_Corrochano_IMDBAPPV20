@@ -181,7 +181,7 @@ public class UsersSync {
      * Se envían los datos en TEXTO PLANO.
      *
      * @param context  Contexto de la aplicación.
-     * @param userId   Identificador del usuario.
+     * @param userId   Identificador del usuario.a
      * @param name     Nuevo nombre.
      * @param email    Nuevo email.
      * @param phone    Nuevo teléfono en texto plano.

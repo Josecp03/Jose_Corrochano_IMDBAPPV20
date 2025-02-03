@@ -91,8 +91,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Sincroniza los datos del usuario desde Firestore a la base local
         syncUserDataFromFirestore();
-
-        // Carga los datos en la interfaz, dando prioridad a los datos locales
+        // Carga los datos en la interfaz dando prioridad a la información local
         loadUserData();
 
         // Sincroniza los favoritos desde Firestore hacia la base de datos local
@@ -161,15 +160,38 @@ public class MainActivity extends AppCompatActivity {
     private void updateLocalUserData(String userId, String name, String email, String phone, String address, String photoUrl) {
         try {
             FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(this);
+            // Aquí se sobrescribe la DB local solo en los campos que no están definidos
+            // Si en la DB local ya existe un nombre o foto, se mantiene ese valor
+            SQLiteDatabase db = dbHelper.getReadableDatabase();
+            Cursor cursor = db.rawQuery(
+                    "SELECT " + FavoriteDatabaseHelper.COL_NAME + ", " +
+                            FavoriteDatabaseHelper.COL_PHOTO_URL +
+                            " FROM " + FavoriteDatabaseHelper.TABLE_USUARIOS +
+                            " WHERE " + FavoriteDatabaseHelper.COL_USER_ID + " = ?",
+                    new String[]{userId}
+            );
+            String localName = null;
+            String localPhotoUrl = null;
+            if (cursor != null && cursor.moveToFirst()) {
+                localName = cursor.getString(0);
+                localPhotoUrl = cursor.getString(1);
+                cursor.close();
+            }
+            db.close();
+
+            // Si existen valores locales no vacíos, se mantienen
+            String finalName = (localName != null && !localName.trim().isEmpty()) ? localName : name;
+            String finalPhotoUrl = (localPhotoUrl != null && !localPhotoUrl.trim().isEmpty()) ? localPhotoUrl : photoUrl;
+
             dbHelper.insertOrUpdateUser(
                     userId,
-                    name,
+                    finalName,
                     email,
                     DateFormat.format("yyyy-MM-dd HH:mm:ss", new Date()).toString(),
                     null,
                     phone,
                     address,
-                    photoUrl
+                    finalPhotoUrl
             );
         } catch (Exception ex) {
             Log.e("MainActivity", "Error actualizando la DB local con datos de la nube: " + ex.getMessage());
@@ -187,12 +209,12 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // Valores por defecto de Firebase (por ejemplo, datos de Google)
+        // Valores por defecto de Firebase
         String defaultName = firebaseUser.getDisplayName() != null ? firebaseUser.getDisplayName() : "Usuario";
         String defaultEmail = (firebaseUser.getEmail() != null) ? firebaseUser.getEmail() : "Sin email";
         Uri defaultPhotoUri = firebaseUser.getPhotoUrl();
 
-        // Consultamos la base de datos local para ver si se han almacenado cambios en nombre y foto
+        // Consultamos la base de datos local para ver si hay datos guardados para nombre y foto
         FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(this);
         SQLiteDatabase db = dbHelper.getReadableDatabase();
         Cursor cursor = db.rawQuery(
@@ -212,7 +234,7 @@ public class MainActivity extends AppCompatActivity {
         }
         db.close();
 
-        // Si existen datos en la DB local, se usan; de lo contrario, se toman los datos por defecto
+        // Se usa la información local si existe
         String finalName = (localName != null && !localName.trim().isEmpty()) ? localName : defaultName;
         Uri finalPhotoUri = (localPhotoUrl != null && !localPhotoUrl.trim().isEmpty()) ? Uri.parse(localPhotoUrl) : defaultPhotoUri;
 
@@ -258,8 +280,7 @@ public class MainActivity extends AppCompatActivity {
             Intent intent = new Intent(MainActivity.this, EditUserActivity.class);
             FirebaseUser usuario = mAuth.getCurrentUser();
             if (usuario != null) {
-                // Al editar, no se forzará la foto ni el nombre de Firebase.
-                // Se puede consultar la DB local si se desea pasar la foto actualizada.
+                // Consultamos la DB local para enviar la foto actualizada al editar
                 FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(this);
                 SQLiteDatabase db = dbHelper.getReadableDatabase();
                 Cursor cursor = db.rawQuery(

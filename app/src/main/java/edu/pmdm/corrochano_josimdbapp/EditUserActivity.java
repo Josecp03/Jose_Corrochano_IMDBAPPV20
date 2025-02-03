@@ -279,6 +279,8 @@ public class EditUserActivity extends AppCompatActivity {
                     String url = input.getText().toString().trim();
                     if (!url.isEmpty()) {
                         externalPhotoUrl = url;
+                        // Importante: si se escoge una URL, se borra la imagen tomada con la cámara
+                        cameraImageUri = null;
                         loadImageIntoView(Uri.parse(url));
                     } else {
                         Toast.makeText(this, "URL vacía", Toast.LENGTH_SHORT).show();
@@ -287,6 +289,7 @@ public class EditUserActivity extends AppCompatActivity {
                 .setNegativeButton("Cancelar", null)
                 .show();
     }
+
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
