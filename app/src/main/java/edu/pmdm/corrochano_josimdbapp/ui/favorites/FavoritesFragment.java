@@ -28,7 +28,7 @@ import java.util.List;
 
 import edu.pmdm.corrochano_josimdbapp.R;
 import edu.pmdm.corrochano_josimdbapp.adapters.MovieAdapter;
-import edu.pmdm.corrochano_josimdbapp.database.FavoriteDatabaseHelper;
+import edu.pmdm.corrochano_josimdbapp.database.DatabaseHelper;
 import edu.pmdm.corrochano_josimdbapp.databinding.FragmentFavoritesBinding;
 import edu.pmdm.corrochano_josimdbapp.models.Movie;
 
@@ -48,7 +48,7 @@ public class FavoritesFragment extends Fragment {
     private boolean favoritos = true;
     private String idUsuario;
     private List<Movie> pelisFavoritas = new ArrayList<>();
-    private FavoriteDatabaseHelper database;
+    private DatabaseHelper database;
     private MovieAdapter adapter;
     private ActivityResultLauncher<String[]> requestPermissionsLauncher;
     private ActivityResultLauncher<Intent> enableBluetoothLauncher;
@@ -62,7 +62,7 @@ public class FavoritesFragment extends Fragment {
         idUsuario = FirebaseAuth.getInstance().getCurrentUser().getUid();
 
         // Crear la base de datos y un Handler para ejecutar tareas en la hebra principal
-        database = new FavoriteDatabaseHelper(getContext());
+        database = new DatabaseHelper(getContext());
         mainHandler = new Handler(Looper.getMainLooper());
 
         // Configurar el RecyclerView
@@ -262,7 +262,7 @@ public class FavoritesFragment extends Fragment {
 
             // Consultar la tabla de favoritos para obtener las películas del usuario actual
             Cursor cursor = db.rawQuery(
-                    "SELECT idPelicula, nombrePelicula, portadaURL FROM " + FavoriteDatabaseHelper.TABLE_FAVORITOS + " WHERE idUsuario=?",
+                    "SELECT idPelicula, nombrePelicula, portadaURL FROM " + DatabaseHelper.TABLE_FAVORITOS + " WHERE idUsuario=?",
                     new String[]{idUsuario}
             );
 

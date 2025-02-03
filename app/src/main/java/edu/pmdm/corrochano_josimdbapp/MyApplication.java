@@ -1,4 +1,3 @@
-// Archivo: MyApplication.java
 package edu.pmdm.corrochano_josimdbapp;
 
 import android.app.Application;
@@ -20,5 +19,6 @@ public class MyApplication extends Application {
 
         // Verificar si hay un logout pendiente
         appLifeCycleManager.checkForPendingLogout();
+
     }
 }

@@ -1,108 +1,96 @@
 package edu.pmdm.corrochano_josimdbapp;
 
-import android.security.keystore.KeyGenParameterSpec;
-import android.security.keystore.KeyProperties;
 import android.util.Base64;
 import android.util.Log;
 
-import java.nio.ByteBuffer;
-import java.security.KeyStore;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 
 import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
 public class KeyStoreManager {
-    private static final String TAG = "KeystoreManager";
-    private static final String ANDROID_KEYSTORE = "AndroidKeyStore";
-    private static final String KEY_ALIAS = "MyAppKeyAlias";
+
+    // Atributos
+    private static final String TAG = "KeyStoreManager";
+    private static final String SECRET_KEY = "ThisIsMyStaticKeyForDemoPurposesOnly";
     private static final String TRANSFORMATION = "AES/GCM/NoPadding";
     private static final int IV_SIZE = 12;
     private static final int TAG_LENGTH = 128;
 
-    private SecretKey secretKey;
+    private SecretKeySpec secretKey;
 
     public KeyStoreManager() {
         try {
-            KeyStore keyStore = KeyStore.getInstance(ANDROID_KEYSTORE);
-            keyStore.load(null);
-
-            // Verificar si la clave ya existe
-            if (!keyStore.containsAlias(KEY_ALIAS)) {
-                generateKey();
-            }
-
-            // Obtener la clave
-            KeyStore.SecretKeyEntry secretKeyEntry = (KeyStore.SecretKeyEntry) keyStore.getEntry(KEY_ALIAS, null);
-            if (secretKeyEntry != null) {
-                secretKey = secretKeyEntry.getSecretKey();
-            }
+            // Derivar una clave AES a partir del hash SHA-256 del string secreto
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] keyBytes = digest.digest(SECRET_KEY.getBytes("UTF-8"));
+            secretKey = new SecretKeySpec(keyBytes, "AES");
         } catch (Exception e) {
-            Log.e(TAG, "Error initializing KeystoreManager", e);
-        }
-    }
-
-    private void generateKey() {
-        try {
-            KeyGenerator keyGenerator = KeyGenerator.getInstance(
-                    KeyProperties.KEY_ALGORITHM_AES, ANDROID_KEYSTORE);
-            KeyGenParameterSpec keyGenParameterSpec = new KeyGenParameterSpec.Builder(
-                    KEY_ALIAS,
-                    KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT
-            )
-                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                    .setRandomizedEncryptionRequired(true)
-                    .build();
-            keyGenerator.init(keyGenParameterSpec);
-            keyGenerator.generateKey();
-            Log.d(TAG, "AES key generated and stored in Keystore.");
-        } catch (Exception e) {
-            Log.e(TAG, "Error generating AES key", e);
+            e.printStackTrace();
         }
     }
 
     public String encrypt(String plainText) {
         try {
+
+            // Obtener la instancia del cipher con la transformación indicada
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
-            cipher.init(Cipher.ENCRYPT_MODE, secretKey);
-            byte[] iv = cipher.getIV();
+
+            // Crear un vector de inicialización (IV) aleatorio de tamaño IV_SIZE
+            byte[] iv = new byte[IV_SIZE];
+            SecureRandom secureRandom = new SecureRandom();
+            secureRandom.nextBytes(iv);
+
+            // Configurar el parámetro GCM con la longitud de etiqueta y el IV
+            GCMParameterSpec spec = new GCMParameterSpec(TAG_LENGTH, iv);
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey, spec);
+
+            // Encriptar el texto plano y obtener el texto cifrado
             byte[] cipherText = cipher.doFinal(plainText.getBytes("UTF-8"));
 
-            // Concatenar IV y cipherText
-            ByteBuffer byteBuffer = ByteBuffer.allocate(iv.length + cipherText.length);
-            byteBuffer.put(iv);
-            byteBuffer.put(cipherText);
-            byte[] cipherMessage = byteBuffer.array();
+            // Combinar el IV y el texto cifrado en un solo arreglo
+            int combinedLength = iv.length + cipherText.length;
+            byte[] combined = new byte[combinedLength];
+            System.arraycopy(iv, 0, combined, 0, iv.length);
+            System.arraycopy(cipherText, 0, combined, iv.length, cipherText.length);
 
-            // Codificar en Base64
-            return Base64.encodeToString(cipherMessage, Base64.DEFAULT);
+            // Codificar el resultado en Base64 para su representación como String
+            return Base64.encodeToString(combined, Base64.DEFAULT);
         } catch (Exception e) {
-            Log.e(TAG, "Error encrypting data", e);
+            e.printStackTrace();
             return null;
         }
     }
 
     public String decrypt(String cipherText) {
+
         try {
-            byte[] cipherMessage = Base64.decode(cipherText, Base64.DEFAULT);
 
-            // Extraer IV y cipherText
-            ByteBuffer byteBuffer = ByteBuffer.wrap(cipherMessage);
+            // Decodificar el texto cifrado de Base64 a bytes
+            byte[] combined = Base64.decode(cipherText, Base64.DEFAULT);
+
+            // Extraer el IV de los primeros IV_SIZE bytes
             byte[] iv = new byte[IV_SIZE];
-            byteBuffer.get(iv);
-            byte[] actualCipherText = new byte[byteBuffer.remaining()];
-            byteBuffer.get(actualCipherText);
+            System.arraycopy(combined, 0, iv, 0, IV_SIZE);
 
+            // Calcular la longitud del texto cifrado real
+            int cipherTextLength = combined.length - IV_SIZE;
+            byte[] actualCipherText = new byte[cipherTextLength];
+            System.arraycopy(combined, IV_SIZE, actualCipherText, 0, cipherTextLength);
+
+            // Obtener la instancia del cipher con la transformación indicada
             Cipher cipher = Cipher.getInstance(TRANSFORMATION);
             GCMParameterSpec spec = new GCMParameterSpec(TAG_LENGTH, iv);
             cipher.init(Cipher.DECRYPT_MODE, secretKey, spec);
-            byte[] decryptedBytes = cipher.doFinal(actualCipherText);
 
+            // Desencriptar y obtener el texto plano en bytes
+            byte[] decryptedBytes = cipher.doFinal(actualCipherText);
             return new String(decryptedBytes, "UTF-8");
+
         } catch (Exception e) {
-            Log.e(TAG, "Error decrypting data", e);
+            e.printStackTrace();
             return null;
         }
     }

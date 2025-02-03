@@ -7,9 +7,9 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import androidx.annotation.Nullable;
 
-public class FavoriteDatabaseHelper extends SQLiteOpenHelper {
+public class DatabaseHelper extends SQLiteOpenHelper {
 
-    private static final int DATABASE_VERSION = 11;
+    private static final int DATABASE_VERSION = 13;
     private static final String DATABASE_NOMBRE = "peliculas.db";
     public static final String TABLE_FAVORITOS = "t_favoritos";
     public static final String TABLE_USUARIOS = "t_usuarios";
@@ -22,7 +22,7 @@ public class FavoriteDatabaseHelper extends SQLiteOpenHelper {
     public static final String COL_ADDRESS = "address";
     public static final String COL_PHOTO_URL = "photo_url";
 
-    public FavoriteDatabaseHelper(@Nullable Context context) {
+    public DatabaseHelper(@Nullable Context context) {
         super(context, DATABASE_NOMBRE, null, DATABASE_VERSION);
     }
 
@@ -48,17 +48,12 @@ public class FavoriteDatabaseHelper extends SQLiteOpenHelper {
                 ")");
     }
 
+
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
 
-        if (oldVersion < 11) {
-            db.execSQL("ALTER TABLE " + TABLE_USUARIOS + " ADD COLUMN " + COL_PHONE + " TEXT");
-            db.execSQL("ALTER TABLE " + TABLE_USUARIOS + " ADD COLUMN " + COL_ADDRESS + " TEXT");
-            db.execSQL("ALTER TABLE " + TABLE_USUARIOS + " ADD COLUMN " + COL_PHOTO_URL + " TEXT");
-        }
-
-
     }
+
 
     public long insertarFavorito(SQLiteDatabase db,
                                  String idUsuario,
@@ -79,7 +74,6 @@ public class FavoriteDatabaseHelper extends SQLiteOpenHelper {
                                    String phone, String address, String photoUrl) {
         SQLiteDatabase db = getWritableDatabase();
 
-        // Comprobamos si el usuario ya existe
         Cursor cursor = db.rawQuery("SELECT " + COL_USER_ID + " FROM " + TABLE_USUARIOS +
                 " WHERE " + COL_USER_ID + " = ?", new String[]{userId});
 
@@ -130,4 +124,5 @@ public class FavoriteDatabaseHelper extends SQLiteOpenHelper {
         db.update(TABLE_USUARIOS, values, COL_USER_ID + "=?", new String[]{userId});
         db.close();
     }
+
 }

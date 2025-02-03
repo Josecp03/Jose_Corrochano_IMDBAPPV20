@@ -8,11 +8,10 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
 import android.os.Bundle;
-import android.view.Menu;
-import android.view.MenuItem;
-import android.view.View;
+import android.text.format.DateFormat;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -29,21 +28,24 @@ import com.facebook.AccessToken;
 import com.facebook.Profile;
 import com.facebook.login.LoginManager;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
-import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
-import com.google.android.material.navigation.NavigationView;
+import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
-
-import edu.pmdm.corrochano_josimdbapp.database.FavoriteDatabaseHelper;
-import edu.pmdm.corrochano_josimdbapp.databinding.ActivityMainBinding;
+import com.google.firebase.firestore.FirebaseFirestore;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 
+import edu.pmdm.corrochano_josimdbapp.database.DatabaseHelper;
+import edu.pmdm.corrochano_josimdbapp.databinding.ActivityMainBinding;
+import edu.pmdm.corrochano_josimdbapp.sync.UsersSync;
+import edu.pmdm.corrochano_josimdbapp.sync.FavoritesSync;
+
 public class MainActivity extends AppCompatActivity {
 
+    // Atributos
     private AppBarConfiguration mAppBarConfiguration;
     private ActivityMainBinding binding;
     private GoogleSignInClient googleSignInClient;
@@ -52,171 +54,225 @@ public class MainActivity extends AppCompatActivity {
     private TextView textViewEmail;
     private AppCompatImageView imageViewPhoto;
     private Button logoutButton;
-    private KeyStoreManager keystoreManager;
 
     @SuppressLint("WrongViewCast")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        keystoreManager = new KeyStoreManager();
-
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
-
         setSupportActionBar(binding.appBarMain.toolbar);
 
+        // Configurar el Drawer y la navegación
         DrawerLayout drawer = binding.drawerLayout;
-        NavigationView navigationView = binding.navView;
-
         mAppBarConfiguration = new AppBarConfiguration.Builder(
                 R.id.nav_home,
                 R.id.nav_gallery,
                 R.id.nav_slideshow
-        )
-                .setOpenableLayout(drawer)
-                .build();
+        ).setOpenableLayout(drawer).build();
 
         NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment_content_main);
         NavigationUI.setupActionBarWithNavController(this, navController, mAppBarConfiguration);
-        NavigationUI.setupWithNavController(navigationView, navController);
+        NavigationUI.setupWithNavController(binding.navView, navController);
 
+        // Inicializar Firebase Auth
         mAuth = FirebaseAuth.getInstance();
+
+        // Configurar Google Sign-In
         GoogleSignInOptions options = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                 .requestIdToken(getString(R.string.default_web_client_id))
                 .requestEmail()
                 .build();
         googleSignInClient = GoogleSignIn.getClient(this, options);
 
-        // Header del NavigationView
-        View headerView = navigationView.getHeaderView(0);
-        textViewNombre = headerView.findViewById(R.id.textViewNombre);
-        textViewEmail = headerView.findViewById(R.id.textViewEmail);
-        imageViewPhoto = headerView.findViewById(R.id.imageViewPhoto);
-        logoutButton = headerView.findViewById(R.id.buttonLogout);
+        // Obtener las vistas del header del NavigationView
+        textViewNombre = binding.navView.getHeaderView(0).findViewById(R.id.textViewNombre);
+        textViewEmail = binding.navView.getHeaderView(0).findViewById(R.id.textViewEmail);
+        imageViewPhoto = binding.navView.getHeaderView(0).findViewById(R.id.imageViewPhoto);
+        logoutButton = binding.navView.getHeaderView(0).findViewById(R.id.buttonLogout);
 
+        // Sincronizar los datos del usuario desde Firestore a la base local
+        syncUserDataFromFirestore();
+
+        // Cargar los datos en la interfaz dando prioridad a la información local
         loadUserData();
 
-        // Botón Logout
+        // Sincronizar los favoritos desde Firestore a la base local
+        FirebaseUser usuario = mAuth.getCurrentUser();
+        if (usuario != null) {
+            FavoritesSync.syncFavorites(MainActivity.this, usuario.getUid());
+        }
+
+        // Configurar acción del botón de logout
         logoutButton.setOnClickListener(v -> {
-            FirebaseUser usuario = mAuth.getCurrentUser();
-            if (usuario != null) {
-                String uid = usuario.getUid();
+            FirebaseUser usuarioFB = mAuth.getCurrentUser();
+            if (usuarioFB != null) {
+                String uid = usuarioFB.getUid();
                 String fechaLogout = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date());
-                FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(MainActivity.this);
+                DatabaseHelper dbHelper = new DatabaseHelper(MainActivity.this);
                 dbHelper.updateLastLogout(uid, fechaLogout);
+                UsersSync.addLogout(MainActivity.this, uid, fechaLogout);
+
+                // Retraso para asegurarse de la ejecución de logout
+                new android.os.Handler().postDelayed(() -> {
+                    SharedPreferences preferences = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE);
+                    SharedPreferences.Editor editor = preferences.edit();
+                    editor.putBoolean("isLoggedIn", false);
+                    editor.apply();
+
+                    FirebaseAuth.getInstance().signOut();
+                    googleSignInClient.signOut().addOnCompleteListener(MainActivity.this, task -> {
+                        LoginManager.getInstance().logOut();
+                        textViewNombre.setText("");
+                        textViewEmail.setText("");
+                        Intent intent = new Intent(MainActivity.this, LogInActivity.class);
+                        intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
+                        finish();
+                    });
+                }, 500);
             }
-
-            SharedPreferences preferences = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE);
-            SharedPreferences.Editor editor = preferences.edit();
-            editor.putBoolean("isLoggedIn", false);
-            editor.apply();
-
-            FirebaseAuth.getInstance().signOut();
-            googleSignInClient.signOut().addOnCompleteListener(this, task -> {
-                LoginManager.getInstance().logOut();
-
-                // Limpiar los datos del NavigationView Header
-                textViewNombre.setText("");
-                textViewEmail.setText("");
-
-                Intent intent = new Intent(MainActivity.this, LogInActivity.class);
-                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
-                startActivity(intent);
-                finish();
-            });
         });
     }
 
-    private void loadUserData() {
-        FirebaseUser usuario = mAuth.getCurrentUser();
-        AccessToken fbAccessToken = AccessToken.getCurrentAccessToken();
-        boolean isFacebookLoggedIn = (fbAccessToken != null && !fbAccessToken.isExpired());
+    // Sincroniza la información del usuario desde Firestore y actualiza la base local
+    private void syncUserDataFromFirestore() {
+        FirebaseUser currentUser = mAuth.getCurrentUser();
+        if (currentUser == null) {
+            navegarAlLogin();
+            return;
+        }
+        String userId = currentUser.getUid();
+        FirebaseFirestore.getInstance()
+                .collection("users")
+                .document(userId)
+                .get()
+                .addOnSuccessListener(documentSnapshot -> {
+                    if (documentSnapshot.exists()) {
+                        // Obtener datos de Firestore
+                        String cloudName = documentSnapshot.getString("name");
+                        String cloudEmail = documentSnapshot.getString("email");
+                        String cloudPhotoUrl = documentSnapshot.getString("photo_url");
+                        String cloudPhone = documentSnapshot.getString("phone");
+                        String cloudAddress = documentSnapshot.getString("address");
 
-        if (usuario != null) {
-            // Coger el nombre de Firebase
-            String nombre = usuario.getDisplayName() != null ? usuario.getDisplayName() : "Usuario";
-            String email = (usuario.getEmail() != null) ? usuario.getEmail() : "Sin email";
-            Uri fotoUri = usuario.getPhotoUrl();
-
-            // Comprobar si esta loggeado con Facebook
-            if (isFacebookLoggedIn) {
-                Profile profile = Profile.getCurrentProfile();
-                if (profile != null) {
-                    String facebookNombre = profile.getFirstName() + " " + profile.getLastName();
-                    facebookNombre = facebookNombre.trim().isEmpty() ? "Usuario de Facebook" : facebookNombre;
-                    nombre = facebookNombre;
-
-                    email = "Conectado con Facebook";
-
-                    Uri facebookFoto = profile.getProfilePictureUri(300, 300);
-                    if (facebookFoto != null) {
-                        fotoUri = facebookFoto;
+                        updateLocalUserData(userId, cloudName, cloudEmail, cloudPhone, cloudAddress, cloudPhotoUrl);
                     }
-                }
-            }
+                });
+    }
 
-            // Coger el nombre y foto con el que tengamos en la base local
-            FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(this);
+    // Actualiza o inserta la información del usuario en la base de datos local
+    private void updateLocalUserData(String userId, String name, String email, String phone, String address, String photoUrl) {
+        try {
+            DatabaseHelper dbHelper = new DatabaseHelper(this);
+            // Consultar los valores locales para nombre y foto
             SQLiteDatabase db = dbHelper.getReadableDatabase();
             Cursor cursor = db.rawQuery(
-                    "SELECT " + FavoriteDatabaseHelper.COL_NAME + ", " +
-                            FavoriteDatabaseHelper.COL_PHONE + ", " +
-                            FavoriteDatabaseHelper.COL_ADDRESS + ", " +
-                            FavoriteDatabaseHelper.COL_PHOTO_URL +
-                            " FROM " + FavoriteDatabaseHelper.TABLE_USUARIOS +
-                            " WHERE " + FavoriteDatabaseHelper.COL_USER_ID + " = ?",
-                    new String[]{ usuario.getUid() }
+                    "SELECT " + DatabaseHelper.COL_NAME + ", " + DatabaseHelper.COL_PHOTO_URL +
+                            " FROM " + DatabaseHelper.TABLE_USUARIOS +
+                            " WHERE " + DatabaseHelper.COL_USER_ID + " = ?",
+                    new String[]{userId}
             );
-            String decryptedPhone = "";
-            String decryptedAddress = "";
+            String localName = null;
+            String localPhotoUrl = null;
             if (cursor != null && cursor.moveToFirst()) {
-                String localName = cursor.getString(0);
-                String encryptedPhone = cursor.getString(1);
-                String encryptedAddress = cursor.getString(2);
-                String localPhotoUrl = cursor.getString(3);
-
-                if (localName != null && !localName.trim().isEmpty()) {
-                    nombre = localName;
-                }
-                if (localPhotoUrl != null && !localPhotoUrl.trim().isEmpty()) {
-                    fotoUri = Uri.parse(localPhotoUrl);
-                }
-
-                // Descifrar teléfono y dirección
-                decryptedPhone = keystoreManager.decrypt(encryptedPhone);
-                decryptedAddress = keystoreManager.decrypt(encryptedAddress);
-
-                // Cerramos el cursor
+                localName = cursor.getString(0);
+                localPhotoUrl = cursor.getString(1);
                 cursor.close();
             }
             db.close();
 
-            // Mostrar los datos en el NavigationView Header
-            textViewNombre.setText(nombre);
-            textViewEmail.setText(email);
+            // Se mantienen los valores locales si existen
+            String finalName;
+            if (localName != null && !localName.trim().isEmpty()) {
+                finalName = localName;
+            } else {
+                finalName = name;
+            }
 
-            // Cargar la imagen de perfil usando Glide, evitando la caché para actualizar la foto
-            if (fotoUri != null && !fotoUri.toString().isEmpty()) {
+            String finalPhotoUrl;
+            if (localPhotoUrl != null && !localPhotoUrl.trim().isEmpty()) {
+                finalPhotoUrl = localPhotoUrl;
+            } else {
+                finalPhotoUrl = photoUrl;
+            }
+
+            dbHelper.insertOrUpdateUser(
+                    userId,
+                    finalName,
+                    email,
+                    DateFormat.format("yyyy-MM-dd HH:mm:ss", new Date()).toString(),
+                    null,
+                    phone,
+                    address,
+                    finalPhotoUrl
+            );
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    // Carga los datos del usuario, dando prioridad a la información almacenada en la base de datos local
+    private void loadUserData() {
+        FirebaseUser firebaseUser = mAuth.getCurrentUser();
+        if (firebaseUser == null) {
+            navegarAlLogin();
+            return;
+        }
+
+        // Valores por defecto obtenidos de Firebase
+        String defaultName;
+        if (firebaseUser.getDisplayName() != null) {
+            defaultName = firebaseUser.getDisplayName();
+        } else {
+            defaultName = "Usuario";
+        }
+
+        String defaultEmail;
+        if (firebaseUser.getEmail() != null) {
+            defaultEmail = firebaseUser.getEmail();
+        } else {
+            defaultEmail = "Sin email";
+        }
+
+        Uri defaultPhotoUri = firebaseUser.getPhotoUrl();
+
+        // Comprobar si el usuario está logueado con Facebook
+        AccessToken fbAccessToken = AccessToken.getCurrentAccessToken();
+        boolean isFacebookLoggedIn = (fbAccessToken != null && !fbAccessToken.isExpired());
+
+        if (isFacebookLoggedIn) {
+            Profile fbProfile = Profile.getCurrentProfile();
+            if (fbProfile != null) {
+                String fbName = fbProfile.getFirstName() + " " + fbProfile.getLastName();
+                textViewNombre.setText(fbName);
+                textViewEmail.setText("Conectado con Facebook");
+
+                Uri fbPhotoUri = fbProfile.getProfilePictureUri(300, 300);
                 Glide.with(this)
-                        .load(fotoUri)
+                        .load(fbPhotoUri)
                         .diskCacheStrategy(DiskCacheStrategy.NONE)
                         .skipMemoryCache(true)
                         .circleCrop()
                         .into(imageViewPhoto);
             }
-
         } else {
-            navegarAlLogin();
+            // Si no está logueado con Facebook, utilizar los datos de Firebase
+            textViewNombre.setText(defaultName);
+            textViewEmail.setText(defaultEmail);
+
+            if (defaultPhotoUri != null) {
+                Glide.with(this)
+                        .load(defaultPhotoUri)
+                        .diskCacheStrategy(DiskCacheStrategy.NONE)
+                        .skipMemoryCache(true)
+                        .circleCrop()
+                        .into(imageViewPhoto);
+            }
         }
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        loadUserData();
-    }
-
+    // Navega a la actividad de login y finaliza la actual
     private void navegarAlLogin(){
         Intent intent = new Intent(MainActivity.this, LogInActivity.class);
         startActivity(intent);
@@ -224,31 +280,47 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
+    protected void onResume() {
+        super.onResume();
+        // Al reanudar, sincronizar datos y favoritos
+        syncUserDataFromFirestore();
+        loadUserData();
+        FirebaseUser usuario = mAuth.getCurrentUser();
+        if (usuario != null) {
+            FavoritesSync.syncFavorites(MainActivity.this, usuario.getUid());
+        }
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(android.view.Menu menu) {
         getMenuInflater().inflate(R.menu.main, menu);
         return true;
     }
 
     @Override
-    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+    public boolean onOptionsItemSelected(@NonNull android.view.MenuItem item) {
         int id = item.getItemId();
         if (id == R.id.action_edit_user) {
             Intent intent = new Intent(MainActivity.this, EditUserActivity.class);
-
             FirebaseUser usuario = mAuth.getCurrentUser();
             if (usuario != null) {
-                Uri fotoUri = usuario.getPhotoUrl();
-                AccessToken fbToken = AccessToken.getCurrentAccessToken();
-                if (fbToken != null && !fbToken.isExpired()) {
-                    Profile profile = Profile.getCurrentProfile();
-                    if (profile != null) {
-                        fotoUri = profile.getProfilePictureUri(300, 300);
-                    }
+                // Consultar la base de datos local para obtener la foto actualizada
+                DatabaseHelper dbHelper = new DatabaseHelper(this);
+                SQLiteDatabase db = dbHelper.getReadableDatabase();
+                Cursor cursor = db.rawQuery(
+                        "SELECT " + DatabaseHelper.COL_PHOTO_URL +
+                                " FROM " + DatabaseHelper.TABLE_USUARIOS +
+                                " WHERE " + DatabaseHelper.COL_USER_ID + " = ?",
+                        new String[]{usuario.getUid()}
+                );
+                String localPhoto = "";
+                if (cursor != null && cursor.moveToFirst()) {
+                    localPhoto = cursor.getString(0);
+                    cursor.close();
                 }
-
-                // Pasar la foto como String
-                if (fotoUri != null) {
-                    intent.putExtra("EXTRA_PROFILE_PICTURE_URI", fotoUri.toString());
+                db.close();
+                if (localPhoto != null && !localPhoto.trim().isEmpty()) {
+                    intent.putExtra("EXTRA_PROFILE_PICTURE_URI", localPhoto);
                 }
             }
             startActivity(intent);
@@ -260,7 +332,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onSupportNavigateUp() {
         NavController navController = Navigation.findNavController(this, R.id.nav_host_fragment_content_main);
-        return NavigationUI.navigateUp(navController, mAppBarConfiguration)
-                || super.onSupportNavigateUp();
+        return NavigationUI.navigateUp(navController, mAppBarConfiguration) || super.onSupportNavigateUp();
     }
 }
