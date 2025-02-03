@@ -33,6 +33,10 @@ import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
+import com.google.i18n.phonenumbers.NumberParseException;
+import com.google.i18n.phonenumbers.PhoneNumberUtil;
+import com.google.i18n.phonenumbers.Phonenumber;
+import com.hbb20.CountryCodePicker;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -41,6 +45,7 @@ import java.util.Locale;
 import edu.pmdm.corrochano_josimdbapp.database.FavoriteDatabaseHelper;
 import edu.pmdm.corrochano_josimdbapp.databinding.ActivityMainBinding;
 import edu.pmdm.corrochano_josimdbapp.sync.UsersSync;
+import edu.pmdm.corrochano_josimdbapp.sync.FavoritesSync;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 
 public class MainActivity extends AppCompatActivity {
@@ -90,14 +95,13 @@ public class MainActivity extends AppCompatActivity {
         // Sincroniza los datos del usuario desde Firestore a la base local
         syncUserDataFromFirestore();
 
-        // Carga los datos (ahora actualizados en la base local) en la interfaz
+        // Carga los datos actualizados en la interfaz
         loadUserData();
 
+        // Sincroniza los favoritos desde Firestore hacia la base de datos local
         FirebaseUser usuario = mAuth.getCurrentUser();
         if (usuario != null) {
-            // Sincroniza favoritos (otro proceso de sincronización)
-            // Puedes mantener o modificar este método según tu lógica
-            // FavoritesSync.syncFavorites(MainActivity.this, usuario.getUid());
+            FavoritesSync.syncFavorites(MainActivity.this, usuario.getUid());
         }
 
         logoutButton.setOnClickListener(v -> {
@@ -110,7 +114,6 @@ public class MainActivity extends AppCompatActivity {
                 // Sincronizamos el logout en Firestore
                 UsersSync.addLogout(MainActivity.this, uid, fechaLogout);
 
-                // Retrasamos el signOut para darle tiempo a que se complete la transacción
                 new android.os.Handler().postDelayed(() -> {
                     SharedPreferences preferences = getSharedPreferences("UserPrefs", Context.MODE_PRIVATE);
                     SharedPreferences.Editor editor = preferences.edit();
@@ -132,10 +135,6 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
-    /**
-     * Método que consulta Firestore para obtener los datos actualizados del usuario
-     * y los actualiza en la base de datos local.
-     */
     private void syncUserDataFromFirestore() {
         FirebaseUser currentUser = mAuth.getCurrentUser();
         if (currentUser == null) {
@@ -149,14 +148,12 @@ public class MainActivity extends AppCompatActivity {
                 .get()
                 .addOnSuccessListener(documentSnapshot -> {
                     if (documentSnapshot.exists()) {
-                        // Se obtienen los datos desde Firestore
                         String cloudName = documentSnapshot.getString("name");
                         String cloudEmail = documentSnapshot.getString("email");
                         String cloudPhotoUrl = documentSnapshot.getString("photo_url");
                         String cloudPhone = documentSnapshot.getString("phone");
                         String cloudAddress = documentSnapshot.getString("address");
 
-                        // Actualiza la base de datos local con los datos obtenidos
                         updateLocalUserData(userId, cloudName, cloudEmail, cloudPhone, cloudAddress, cloudPhotoUrl);
                     }
                 })
@@ -165,22 +162,17 @@ public class MainActivity extends AppCompatActivity {
                 });
     }
 
-    /**
-     * Actualiza la base de datos local con los datos obtenidos de la nube.
-     * Se reutiliza el método insertOrUpdateUser para actualizar la tabla.
-     */
     private void updateLocalUserData(String userId, String name, String email, String phone, String address, String photoUrl) {
         try {
             FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(this);
-            // Se actualiza la tabla; para last_logout se deja sin modificar (null)
             dbHelper.insertOrUpdateUser(
                     userId,
                     name,
                     email,
                     DateFormat.format("yyyy-MM-dd HH:mm:ss", new Date()).toString(),
-                    null, // no se modifica el logout
-                    phone,    // se asume que phone ya viene (encriptado o no, según tu lógica)
-                    address,  // lo mismo para address
+                    null,
+                    phone,
+                    address,
                     photoUrl
             );
         } catch (Exception ex) {
@@ -188,9 +180,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * Carga la información del usuario desde la base de datos local (fall-back).
-     */
     private void loadUserData() {
         FirebaseUser usuario = mAuth.getCurrentUser();
         AccessToken fbAccessToken = AccessToken.getCurrentAccessToken();
@@ -261,10 +250,13 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // Sincroniza la información desde Firestore a la base local al reanudar la actividad
         syncUserDataFromFirestore();
-        // Luego se cargan los datos actualizados en la interfaz
         loadUserData();
+        // Sincronizar favoritos al reanudar la actividad
+        FirebaseUser usuario = mAuth.getCurrentUser();
+        if (usuario != null) {
+            FavoritesSync.syncFavorites(MainActivity.this, usuario.getUid());
+        }
     }
 
     @Override

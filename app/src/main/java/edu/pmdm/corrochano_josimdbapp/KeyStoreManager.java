@@ -24,7 +24,6 @@ public class KeyStoreManager {
             // Derivamos una clave AES a partir del hash SHA-256 del string secreto.
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] keyBytes = digest.digest(SECRET_KEY.getBytes("UTF-8"));
-            // Usamos los 16 primeros bytes para AES-128 (o los 32 completos para AES-256 si se permite)
             secretKey = new SecretKeySpec(keyBytes, "AES");
         } catch (Exception e) {
             Log.e(TAG, "Error initializing KeyStoreManager", e);
