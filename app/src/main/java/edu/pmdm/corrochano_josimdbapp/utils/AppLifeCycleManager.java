@@ -15,6 +15,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 
 import edu.pmdm.corrochano_josimdbapp.database.FavoriteDatabaseHelper;
+import edu.pmdm.corrochano_josimdbapp.sync.UsersSync;
 
 public class AppLifeCycleManager implements Application.ActivityLifecycleCallbacks, ComponentCallbacks2 {
 
@@ -33,8 +34,7 @@ public class AppLifeCycleManager implements Application.ActivityLifecycleCallbac
     }
 
     @Override
-    public void onActivityCreated(Activity activity, android.os.Bundle savedInstanceState) {
-    }
+    public void onActivityCreated(Activity activity, android.os.Bundle savedInstanceState) {}
 
     @Override
     public void onActivityStarted(Activity activity) {
@@ -48,12 +48,10 @@ public class AppLifeCycleManager implements Application.ActivityLifecycleCallbac
     }
 
     @Override
-    public void onActivityResumed(Activity activity) {
-    }
+    public void onActivityResumed(Activity activity) {}
 
     @Override
-    public void onActivityPaused(Activity activity) {
-    }
+    public void onActivityPaused(Activity activity) {}
 
     @Override
     public void onActivityStopped(Activity activity) {
@@ -67,8 +65,7 @@ public class AppLifeCycleManager implements Application.ActivityLifecycleCallbac
     }
 
     @Override
-    public void onActivitySaveInstanceState(Activity activity, android.os.Bundle outState) {
-    }
+    public void onActivitySaveInstanceState(Activity activity, android.os.Bundle outState) {}
 
     @Override
     public void onActivityDestroyed(Activity activity) {
@@ -91,39 +88,27 @@ public class AppLifeCycleManager implements Application.ActivityLifecycleCallbac
     }
 
     private void registerUserLogout(FirebaseUser user) {
-
-        // Crear la fecha de logout
         String fechaLogout = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(new java.util.Date());
-
-        // Actualizar en la base de datos
         FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(context);
         dbHelper.updateLastLogout(user.getUid(), fechaLogout);
-
+        // Sincronizamos el logout en Firestore
+        UsersSync.addLogout(context, user.getUid(), fechaLogout);
     }
 
-
     public void checkForPendingLogout() {
-
         SharedPreferences preferences = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
         boolean wasLoggedIn = preferences.getBoolean(PREF_IS_LOGGED_IN, false);
-
         if (wasLoggedIn) {
-
             FirebaseUser currentUser = FirebaseAuth.getInstance().getCurrentUser();
             if (currentUser != null) {
                 registerUserLogout(currentUser);
             }
-
         }
     }
 
     @Override
-    public void onConfigurationChanged(@NonNull Configuration newConfig) {
-
-    }
+    public void onConfigurationChanged(@NonNull Configuration newConfig) {}
 
     @Override
-    public void onLowMemory() {
-
-    }
+    public void onLowMemory() {}
 }
