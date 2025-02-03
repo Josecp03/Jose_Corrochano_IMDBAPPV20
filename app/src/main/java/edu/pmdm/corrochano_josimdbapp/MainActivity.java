@@ -33,10 +33,8 @@ import com.google.android.gms.auth.api.signin.GoogleSignInClient;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.firestore.FirebaseFirestore;
-import com.google.i18n.phonenumbers.NumberParseException;
-import com.google.i18n.phonenumbers.PhoneNumberUtil;
-import com.google.i18n.phonenumbers.Phonenumber;
 import com.hbb20.CountryCodePicker;
+import com.google.android.gms.auth.api.signin.GoogleSignIn;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -46,7 +44,6 @@ import edu.pmdm.corrochano_josimdbapp.database.FavoriteDatabaseHelper;
 import edu.pmdm.corrochano_josimdbapp.databinding.ActivityMainBinding;
 import edu.pmdm.corrochano_josimdbapp.sync.UsersSync;
 import edu.pmdm.corrochano_josimdbapp.sync.FavoritesSync;
-import com.google.android.gms.auth.api.signin.GoogleSignIn;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -95,7 +92,7 @@ public class MainActivity extends AppCompatActivity {
         // Sincroniza los datos del usuario desde Firestore a la base local
         syncUserDataFromFirestore();
 
-        // Carga los datos actualizados en la interfaz
+        // Carga los datos en la interfaz, dando prioridad a los datos locales
         loadUserData();
 
         // Sincroniza los favoritos desde Firestore hacia la base de datos local
@@ -111,7 +108,6 @@ public class MainActivity extends AppCompatActivity {
                 String fechaLogout = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date());
                 FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(MainActivity.this);
                 dbHelper.updateLastLogout(uid, fechaLogout);
-                // Sincronizamos el logout en Firestore
                 UsersSync.addLogout(MainActivity.this, uid, fechaLogout);
 
                 new android.os.Handler().postDelayed(() -> {
@@ -180,64 +176,55 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    /**
+     * Carga los datos del usuario dando prioridad a la información almacenada en la base de datos local.
+     * Si en la DB local existe un nombre o foto, se usan; de lo contrario se usan los valores por defecto de Firebase.
+     */
     private void loadUserData() {
-        FirebaseUser usuario = mAuth.getCurrentUser();
-        AccessToken fbAccessToken = AccessToken.getCurrentAccessToken();
-        boolean isFacebookLoggedIn = (fbAccessToken != null && !fbAccessToken.isExpired());
-        if (usuario != null) {
-            String nombre = usuario.getDisplayName() != null ? usuario.getDisplayName() : "Usuario";
-            String email = (usuario.getEmail() != null) ? usuario.getEmail() : "Sin email";
-            Uri fotoUri = usuario.getPhotoUrl();
-            if (isFacebookLoggedIn) {
-                Profile profile = Profile.getCurrentProfile();
-                if (profile != null) {
-                    String facebookNombre = profile.getFirstName() + " " + profile.getLastName();
-                    facebookNombre = facebookNombre.trim().isEmpty() ? "Usuario de Facebook" : facebookNombre;
-                    nombre = facebookNombre;
-                    email = "Conectado con Facebook";
-                    Uri facebookFoto = profile.getProfilePictureUri(300, 300);
-                    if (facebookFoto != null) {
-                        fotoUri = facebookFoto;
-                    }
-                }
-            }
-            FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(this);
-            SQLiteDatabase db = dbHelper.getReadableDatabase();
-            Cursor cursor = db.rawQuery(
-                    "SELECT " + FavoriteDatabaseHelper.COL_NAME + ", " +
-                            FavoriteDatabaseHelper.COL_PHONE + ", " +
-                            FavoriteDatabaseHelper.COL_ADDRESS + ", " +
-                            FavoriteDatabaseHelper.COL_PHOTO_URL +
-                            " FROM " + FavoriteDatabaseHelper.TABLE_USUARIOS +
-                            " WHERE " + FavoriteDatabaseHelper.COL_USER_ID + " = ?",
-                    new String[]{ usuario.getUid() }
-            );
-            if (cursor != null && cursor.moveToFirst()) {
-                String localName = cursor.getString(0);
-                String encryptedPhone = cursor.getString(1);
-                String encryptedAddress = cursor.getString(2);
-                String localPhotoUrl = cursor.getString(3);
-                if (localName != null && !localName.trim().isEmpty()) {
-                    nombre = localName;
-                }
-                if (localPhotoUrl != null && !localPhotoUrl.trim().isEmpty()) {
-                    fotoUri = Uri.parse(localPhotoUrl);
-                }
-                cursor.close();
-            }
-            db.close();
-            textViewNombre.setText(nombre);
-            textViewEmail.setText(email);
-            if (fotoUri != null && !fotoUri.toString().isEmpty()) {
-                Glide.with(this)
-                        .load(fotoUri)
-                        .diskCacheStrategy(DiskCacheStrategy.NONE)
-                        .skipMemoryCache(true)
-                        .circleCrop()
-                        .into(imageViewPhoto);
-            }
-        } else {
+        FirebaseUser firebaseUser = mAuth.getCurrentUser();
+        if (firebaseUser == null) {
             navegarAlLogin();
+            return;
+        }
+
+        // Valores por defecto de Firebase (por ejemplo, datos de Google)
+        String defaultName = firebaseUser.getDisplayName() != null ? firebaseUser.getDisplayName() : "Usuario";
+        String defaultEmail = (firebaseUser.getEmail() != null) ? firebaseUser.getEmail() : "Sin email";
+        Uri defaultPhotoUri = firebaseUser.getPhotoUrl();
+
+        // Consultamos la base de datos local para ver si se han almacenado cambios en nombre y foto
+        FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(this);
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        Cursor cursor = db.rawQuery(
+                "SELECT " + FavoriteDatabaseHelper.COL_NAME + ", " +
+                        FavoriteDatabaseHelper.COL_PHOTO_URL +
+                        " FROM " + FavoriteDatabaseHelper.TABLE_USUARIOS +
+                        " WHERE " + FavoriteDatabaseHelper.COL_USER_ID + " = ?",
+                new String[]{firebaseUser.getUid()}
+        );
+
+        String localName = null;
+        String localPhotoUrl = null;
+        if (cursor != null && cursor.moveToFirst()) {
+            localName = cursor.getString(0);
+            localPhotoUrl = cursor.getString(1);
+            cursor.close();
+        }
+        db.close();
+
+        // Si existen datos en la DB local, se usan; de lo contrario, se toman los datos por defecto
+        String finalName = (localName != null && !localName.trim().isEmpty()) ? localName : defaultName;
+        Uri finalPhotoUri = (localPhotoUrl != null && !localPhotoUrl.trim().isEmpty()) ? Uri.parse(localPhotoUrl) : defaultPhotoUri;
+
+        textViewNombre.setText(finalName);
+        textViewEmail.setText(defaultEmail);
+        if (finalPhotoUri != null && !finalPhotoUri.toString().isEmpty()) {
+            Glide.with(this)
+                    .load(finalPhotoUri)
+                    .diskCacheStrategy(DiskCacheStrategy.NONE)
+                    .skipMemoryCache(true)
+                    .circleCrop()
+                    .into(imageViewPhoto);
         }
     }
 
@@ -252,7 +239,6 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         syncUserDataFromFirestore();
         loadUserData();
-        // Sincronizar favoritos al reanudar la actividad
         FirebaseUser usuario = mAuth.getCurrentUser();
         if (usuario != null) {
             FavoritesSync.syncFavorites(MainActivity.this, usuario.getUid());
@@ -272,16 +258,24 @@ public class MainActivity extends AppCompatActivity {
             Intent intent = new Intent(MainActivity.this, EditUserActivity.class);
             FirebaseUser usuario = mAuth.getCurrentUser();
             if (usuario != null) {
-                Uri fotoUri = usuario.getPhotoUrl();
-                AccessToken fbToken = AccessToken.getCurrentAccessToken();
-                if (fbToken != null && !fbToken.isExpired()) {
-                    Profile profile = Profile.getCurrentProfile();
-                    if (profile != null) {
-                        fotoUri = profile.getProfilePictureUri(300, 300);
-                    }
+                // Al editar, no se forzará la foto ni el nombre de Firebase.
+                // Se puede consultar la DB local si se desea pasar la foto actualizada.
+                FavoriteDatabaseHelper dbHelper = new FavoriteDatabaseHelper(this);
+                SQLiteDatabase db = dbHelper.getReadableDatabase();
+                Cursor cursor = db.rawQuery(
+                        "SELECT " + FavoriteDatabaseHelper.COL_PHOTO_URL +
+                                " FROM " + FavoriteDatabaseHelper.TABLE_USUARIOS +
+                                " WHERE " + FavoriteDatabaseHelper.COL_USER_ID + " = ?",
+                        new String[]{usuario.getUid()}
+                );
+                String localPhoto = "";
+                if (cursor != null && cursor.moveToFirst()) {
+                    localPhoto = cursor.getString(0);
+                    cursor.close();
                 }
-                if (fotoUri != null) {
-                    intent.putExtra("EXTRA_PROFILE_PICTURE_URI", fotoUri.toString());
+                db.close();
+                if (localPhoto != null && !localPhoto.trim().isEmpty()) {
+                    intent.putExtra("EXTRA_PROFILE_PICTURE_URI", localPhoto);
                 }
             }
             startActivity(intent);
